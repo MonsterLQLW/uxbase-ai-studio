@@ -1,6 +1,6 @@
-import { MessageSquare, Box, Settings, Frame } from 'lucide-react'
+import { MessageSquare, Settings, Frame, Scissors, Package } from 'lucide-react'
 
-type Tab = 'chat' | '3d' | 'avatar-frame' | 'settings'
+type Tab = 'chat' | 'avatar-frame' | 'ai-matting' | 'output-tool' | 'settings'
 
 interface NavItemProps {
   icon: React.ReactNode
@@ -32,6 +32,10 @@ interface LayoutProps {
 }
 
 export default function Layout({ children, activeTab, onTabChange }: LayoutProps) {
+  const isCanvasTab =
+    activeTab === 'avatar-frame' ||
+    activeTab === 'ai-matting' ||
+    activeTab === 'output-tool'
   return (
     <div className="flex flex-col h-screen bg-slate-950 text-slate-200">
       {/* 顶部导航 */}
@@ -46,16 +50,22 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
               onClick={() => onTabChange('chat')}
             />
             <NavItem
-              icon={<Box size={18} />}
-              label="3D Scene"
-              active={activeTab === '3d'}
-              onClick={() => onTabChange('3d')}
-            />
-            <NavItem
               icon={<Frame size={18} />}
               label="头像框设计"
               active={activeTab === 'avatar-frame'}
               onClick={() => onTabChange('avatar-frame')}
+            />
+            <NavItem
+              icon={<Scissors size={18} />}
+              label="AI matting"
+              active={activeTab === 'ai-matting'}
+              onClick={() => onTabChange('ai-matting')}
+            />
+            <NavItem
+              icon={<Package size={18} />}
+              label="输出工具"
+              active={activeTab === 'output-tool'}
+              onClick={() => onTabChange('output-tool')}
             />
             <NavItem
               icon={<Settings size={18} />}
@@ -72,7 +82,7 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
 
       {/* 主内容 */}
       <main className="flex-1 overflow-hidden">
-        <div className="max-w-7xl mx-auto px-6 py-8 h-full">{children}</div>
+        <div className={isCanvasTab ? 'w-full h-full' : 'max-w-7xl mx-auto px-6 py-8 h-full'}>{children}</div>
       </main>
     </div>
   )

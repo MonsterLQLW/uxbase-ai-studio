@@ -1,12 +1,15 @@
 import { useState, useRef } from 'react'
-import { chatWithGemini, type ChatMessage } from '../services/gemini'
+import { chatWithGemini, chatWithTIMI, type ChatMessage } from '../services/gemini'
 import { Send, Image as ImageIcon, Loader } from 'lucide-react'
+
+type ChatModel = 'gemini' | 'timi'
 
 export default function ChatPanel() {
   const [input, setInput] = useState('')
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [loading, setLoading] = useState(false)
   const [selectedImage, setSelectedImage] = useState<string | null>(null)
+  const [chatModel, setChatModel] = useState<ChatModel>('gemini')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
 
@@ -40,11 +43,16 @@ export default function ChatPanel() {
     scrollToBottom()
 
     try {
-      const replyText = await chatWithGemini([...messages, userMsg])
+      let replyText: string
+      if (chatModel === 'timi') {
+        replyText = await chatWithTIMI([...messages, userMsg])
+      } else {
+        replyText = await chatWithGemini([...messages, userMsg])
+      }
       setMessages(prev => [...prev, { role: 'model', text: replyText }])
     } catch (e: any) {
       const errMsg = e?.message?.includes('API_KEY')
-        ? 'API Key 未配置，请打开 src/services/gemini.ts 填入你的 Key'
+        ? 'API Key 未配置，请打开设置页填写'
         : `出错了: ${e?.message || '未知错误'}`
       setMessages(prev => [...prev, { role: 'model', text: errMsg }])
     }
@@ -109,6 +117,30 @@ export default function ChatPanel() {
         </div>
       )}
 
+      {/* 模型选择器 + 输入区 */}
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setChatModel('gemini')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+              chatModel === 'gemini'
+                ? 'bg-indigo-600 text-white'
+                : 'bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-700'
+            }`}
+          >
+            ✨ Gemini
+          </button>
+          <button
+            onClick={() => setChatModel('timi')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+              chatModel === 'timi'
+                ? 'bg-blue-600 text-white'
+                : 'bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-700'
+            }`}
+          >
+            🤖 TIMI AI
+          </button>
+        </div>
       {/* 输入区 */}
       <div className="flex gap-2 items-end">
         <input
@@ -143,7 +175,7 @@ export default function ChatPanel() {
             className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 
               focus:outline-none focus:border-indigo-500 resize-none text-sm
               placeholder:text-slate-500"
-            placeholder="问 Gemini...（支持上传图片）"
+            placeholder={chatModel === 'timi' ? '问 TIMI AI...（支持上传图片）' : '问 Gemini...（支持上传图片）'}
             style={{ minHeight: '48px', maxHeight: '120px' }}
           />
         </div>
@@ -156,6 +188,7 @@ export default function ChatPanel() {
         >
           <Send size={20} />
         </button>
+      </div>
       </div>
     </div>
   )

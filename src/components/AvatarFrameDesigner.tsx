@@ -790,14 +790,22 @@ async function blobUrlToDataUrl(url: string): Promise<string> {
   })
 }
 
+const _normalizedImageCache = new Map<string, Promise<string>>()
+async function normalizeOneImageUrl(url: string): Promise<string> {
+  if (!url) return ''
+  if (!url.startsWith('blob:')) return url
+  const cached = _normalizedImageCache.get(url)
+  if (cached) return await cached
+  const p = blobUrlToDataUrl(url).catch(e => {
+    _normalizedImageCache.delete(url)
+    throw e
+  })
+  _normalizedImageCache.set(url, p)
+  return await p
+}
+
 async function normalizeImageUrls(urls: string[]): Promise<string[]> {
-  const out: string[] = []
-  for (const u of urls) {
-    if (!u) continue
-    if (u.startsWith('blob:')) out.push(await blobUrlToDataUrl(u))
-    else out.push(u)
-  }
-  return out
+  return await Promise.all((urls || []).filter(Boolean).map(u => normalizeOneImageUrl(u)))
 }
 
 function SimilarReferenceNode({ data }: NodeProps<CustomNodeData>) {

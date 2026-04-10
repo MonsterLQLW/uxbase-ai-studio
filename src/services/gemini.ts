@@ -635,8 +635,14 @@ export async function generateImageWithTIMI({
     { type: 'text', text: prompt },
   ]
 
-  if (referenceImages && referenceImages.length > 0) {
-    for (const img of referenceImages) {
+  // 参考图在浏览器侧先压缩，显著减少 TIMI 请求体积与超时概率
+  const refs =
+    referenceImages && referenceImages.length > 0
+      ? await Promise.all(referenceImages.map(u => compressDataUrlForGemini(u, 512, 0.78)))
+      : []
+
+  if (refs.length > 0) {
+    for (const img of refs) {
       userContent.push({
         type: 'image_url',
         image_url: { url: img.startsWith('data:') ? img : `data:image/png;base64,${img}` },

@@ -705,7 +705,14 @@ const OT_INITIAL_EDGES: Edge[] = [
 ]
 
 /** 输出工具 Tab 定义 */
-type OutputToolTabId = 'signature_gift' | 'signature_peripheral' | 'button_bundle' | 'legend_broadcast' | 'honor_broadcast'
+type OutputToolTabId =
+  | 'signature_gift'
+  | 'signature_peripheral'
+  | 'button_bundle'
+  | 'legend_broadcast'
+  | 'honor_broadcast'
+  | 'upload_discount'
+  | 'mall_gift_request'
 
 interface OutputToolTab {
   id: OutputToolTabId
@@ -719,10 +726,21 @@ const OUTPUT_TOOL_TABS: OutputToolTab[] = [
   { id: 'button_bundle', name: '按键·配套图', built: false },
   { id: 'legend_broadcast', name: '传说播报·配套图', built: false },
   { id: 'honor_broadcast', name: '荣耀播报·配套图', built: false },
+  { id: 'upload_discount', name: '上传·特惠图', built: false },
+  { id: 'mall_gift_request', name: '商城·索赠图', built: false },
 ]
 
 export default function OutputTool() {
   const [activeTab, setActiveTab] = useState<OutputToolTabId>('signature_gift')
+  const [templateChannel, setTemplateChannel] = useState<'wz-domestic' | 'wz-camp'>('wz-domestic')
+  const [tplChannelOpen, setTplChannelOpen] = useState(false)
+  const tplChannelBtnRef = useRef<HTMLButtonElement | null>(null)
+  const [ctxMenu, setCtxMenu] = useState<null | { x: number; y: number }>(null)
+
+  useEffect(() => {
+    if (templateChannel === 'wz-camp') setCtxMenu(null)
+  }, [templateChannel])
+
   const OUT = 190
   const PREVIEW = 380
 
@@ -1459,7 +1477,6 @@ export default function OutputTool() {
     [setEdges],
   )
 
-  const [ctxMenu, setCtxMenu] = useState<null | { x: number; y: number }>(null)
   useEffect(() => {
     if (!ctxMenu) return
     const onDown = () => setCtxMenu(null)
@@ -1473,6 +1490,28 @@ export default function OutputTool() {
       window.removeEventListener('keydown', onKey)
     }
   }, [ctxMenu])
+
+  // close template channel dropdown on outside click / Esc
+  useEffect(() => {
+    if (!tplChannelOpen) return
+    const onDown = (e: MouseEvent) => {
+      const btn = tplChannelBtnRef.current
+      const target = e.target as globalThis.Node | null
+      if (!btn || !target) return
+      // If click is on the button, keep toggle behavior.
+      if (btn.contains(target)) return
+      setTplChannelOpen(false)
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setTplChannelOpen(false)
+    }
+    window.addEventListener('mousedown', onDown)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('mousedown', onDown)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [tplChannelOpen])
 
   const averageView = useCallback(() => {
     setCtxMenu(null)
@@ -1490,57 +1529,125 @@ export default function OutputTool() {
     <div className="flex h-full w-full min-h-0 flex-col">
       {/* 左侧 Tab 切换 */}
       <div className="absolute left-0 top-0 bottom-0 w-[156px] z-10 flex flex-col border-r border-slate-800/60 bg-slate-950/55 backdrop-blur-md">
-        <div className="px-3 pt-4 pb-3">
-          <div className="text-[13px] font-semibold text-slate-100 leading-none">Templates</div>
-          <div className="mt-1 text-[10px] text-indigo-300/15">Select a template to edit</div>
+        <div className="pt-4 pb-3">
+          <div className="flex items-center justify-between gap-2">
+            <div className="relative mx-1.5 w-[calc(100%-12px)]">
+              <button
+                ref={tplChannelBtnRef}
+                type="button"
+                onClick={() => setTplChannelOpen(v => !v)}
+                className="w-full rounded-xl border border-indigo-500/20 bg-slate-950/55 px-3 py-2 pr-8 text-left text-[12px] font-medium text-slate-100 shadow-[0_12px_40px_rgba(0,0,0,0.35)] outline-none transition hover:border-slate-700/70 focus:border-indigo-400/60 focus:ring-2 focus:ring-indigo-500/15"
+                title="切换模板来源"
+              >
+                {templateChannel === 'wz-domestic' ? '王者国内' : '王者营地'}
+              </button>
+              <div className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-300/80">
+                <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                  <path
+                    fillRule="evenodd"
+                    d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 10.94l3.71-3.71a.75.75 0 1 1 1.06 1.06l-4.24 4.25a.75.75 0 0 1-1.06 0L5.21 8.29a.75.75 0 0 1 .02-1.08Z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+              </div>
+              <div className="pointer-events-none absolute inset-0 rounded-xl ring-1 ring-indigo-500/10" />
+
+              {tplChannelOpen && (
+                <div
+                  className="absolute left-0 right-0 mt-2 z-20 rounded-xl border border-slate-800/80 bg-slate-950/95 backdrop-blur shadow-[0_18px_60px_rgba(0,0,0,0.55)] overflow-hidden"
+                  onMouseDown={e => e.stopPropagation()}
+                >
+                  {(
+                    [
+                      { id: 'wz-domestic' as const, label: '王者国内' },
+                      { id: 'wz-camp' as const, label: '王者营地' },
+                    ] as const
+                  ).map(opt => {
+                    const active = templateChannel === opt.id
+                    return (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => {
+                          setTemplateChannel(opt.id)
+                          setTplChannelOpen(false)
+                        }}
+                        className={`w-full px-3 py-2 text-left text-[12px] transition ${
+                          active
+                            ? 'bg-indigo-500/15 text-indigo-200'
+                            : 'text-slate-200 hover:bg-slate-800/35'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+          {templateChannel === 'wz-domestic' && (
+            <div className="mt-1 mx-1.5 w-[calc(100%-12px)] text-[10px] text-indigo-300/15">选择一个模板进行编辑</div>
+          )}
         </div>
         <div className="flex-1 overflow-y-auto py-2">
-          {OUTPUT_TOOL_TABS.map((tab, idx) => (
-            <button
-              key={tab.id}
-              type="button"
-              disabled={!tab.built}
-              onClick={() => tab.built && setActiveTab(tab.id)}
-              className={`group relative mx-1.5 my-1 w-[calc(100%-12px)] rounded-xl px-2.5 py-2 text-left text-[13px] transition-colors duration-150 ${
-                activeTab === tab.id
-                  ? 'bg-indigo-500/12 text-indigo-300'
-                  : tab.built
-                  ? 'text-slate-300 hover:bg-slate-800/25 hover:text-slate-100'
-                  : 'text-slate-500 cursor-not-allowed'
-              } ${!tab.built ? 'opacity-40' : ''}`}
-            >
-              <div className="min-w-0">
-                <div className="truncate">{tab.name}</div>
-                {idx === 0 && <div className="mt-0.5 truncate text-[10px] text-indigo-300/15">Payments Overview</div>}
-              </div>
-            </button>
-          ))}
+          {templateChannel === 'wz-domestic' &&
+            OUTPUT_TOOL_TABS.map((tab, idx) => (
+              <button
+                key={tab.id}
+                type="button"
+                disabled={!tab.built}
+                onClick={() => tab.built && setActiveTab(tab.id)}
+                className={`group relative mx-1.5 my-1 w-[calc(100%-12px)] rounded-xl px-2.5 py-2 text-left text-[13px] transition-colors duration-150 ${
+                  activeTab === tab.id
+                    ? 'bg-indigo-500/12 text-indigo-300'
+                    : tab.built
+                    ? 'text-slate-300 hover:bg-slate-800/25 hover:text-slate-100'
+                    : 'text-slate-500 cursor-not-allowed'
+                } ${!tab.built ? 'opacity-40' : ''}`}
+              >
+                <div className="min-w-0">
+                  <div className="truncate">{tab.name}</div>
+                  {idx === 0 && <div className="mt-0.5 truncate text-[10px] text-indigo-300/15">Payments Overview</div>}
+                </div>
+              </button>
+            ))}
         </div>
       </div>
 
       {/* 右侧画布区域 */}
-      <div className="flex-1 min-h-0 w-full relative ml-[156px]"
+      <div
+        className="flex-1 min-h-0 w-full relative ml-[156px]"
         onContextMenu={e => {
+          if (templateChannel === 'wz-camp') return
           e.preventDefault()
           setCtxMenu({ x: e.clientX, y: e.clientY })
         }}
       >
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onConnect={onConnect}
-          nodeTypes={nodeTypes}
-          fitView
-          fitViewOptions={{ padding: 0.14 }}
-          proOptions={{ hideAttribution: true }}
-          ref={rfRef}
-        >
-          <Background gap={16} size={1} color="#1f2937" />
-        </ReactFlow>
+        {templateChannel === 'wz-camp' ? (
+          <div className="absolute inset-0 flex items-center justify-center bg-slate-950/40">
+            <p className="text-sm text-slate-400">模板搭建中</p>
+          </div>
+        ) : (
+          <>
+            <ReactFlow
+              nodes={nodes}
+              edges={edges}
+              onNodesChange={onNodesChange}
+              onEdgesChange={onEdgesChange}
+              onConnect={onConnect}
+              nodeTypes={nodeTypes}
+              fitView
+              fitViewOptions={{ padding: 0.14 }}
+              proOptions={{ hideAttribution: true }}
+              ref={rfRef}
+            >
+              <Background gap={16} size={1} color="#1f2937" />
+            </ReactFlow>
+          </>
+        )}
 
-        {ctxMenu && (
+        {ctxMenu && templateChannel === 'wz-domestic' && (
           <div
             className="fixed z-50 min-w-[180px] rounded-xl border border-slate-800 bg-slate-950/95 backdrop-blur shadow-[0_18px_60px_rgba(0,0,0,0.55)] overflow-hidden"
             style={{ left: ctxMenu.x, top: ctxMenu.y }}

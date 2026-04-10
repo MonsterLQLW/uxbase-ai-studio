@@ -56,7 +56,7 @@ export function setGeminiKey(key: string) {
 }
 
 let TIMI_API_KEY = ''
-let TIMI_API_URL = 'http://api.timiai.woa.com/ai_api_manage/llmproxy/chat/completions'
+let TIMI_API_URL = ''
 let TIMI_MODEL = 'gpt-5'
 
 export function setTIMIKey(key: string) {

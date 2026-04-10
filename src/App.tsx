@@ -262,7 +262,7 @@ function SettingsPanel({
                     <label className="text-xs text-slate-500 mb-1 block">API 地址</label>
                     <input
                       type="text"
-                      placeholder="http://api.timiai.woa.com/ai_api_manage/llmproxy/chat/completions"
+                      placeholder="填入 TIMI API 地址"
                       value={timiUrl}
                       onChange={e => onSetTimiUrl(e.target.value)}
                       className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-mono"
@@ -331,7 +331,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>('chat')
   const [geminiKey, setGeminiKey] = useState(() => localStorage.getItem('geminiApiKey') || '')
   const [timiKey, setTimiKey] = useState(() => localStorage.getItem('timiApiKey') || '')
-  const [timiUrl, setTimiUrl] = useState(() => localStorage.getItem('timiApiUrl') || 'http://api.timiai.woa.com/ai_api_manage/llmproxy/chat/completions')
+  const [timiUrl, setTimiUrl] = useState(() => localStorage.getItem('timiApiUrl') || '')
   const [timiModel, setTimiModel] = useState(() => localStorage.getItem('timiModel') || 'gpt-5')
   const [geminiResult, setGeminiResult] = useState<'idle' | 'testing' | 'success' | 'error'>(() =>
     (localStorage.getItem('geminiConnectionStatus') as 'idle' | 'testing' | 'success' | 'error') || 'idle'

@@ -39,6 +39,8 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
     activeTab === 'output-tool'
   const isChatTab = activeTab === 'chat'
   const isHomeTab = activeTab === 'home'
+  const isSettingsTab = activeTab === 'settings'
+  const isMattingTab = activeTab === 'ai-matting'
 
   return (
     <div className="relative z-10 flex h-screen flex-col bg-transparent text-slate-200">
@@ -101,17 +103,23 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
       </header>
 
       <main
-        className={`relative min-h-0 flex-1 overflow-hidden ${isHomeTab ? '' : 'bg-slate-950/[0.86] backdrop-blur-md'}`}
+        className={`relative min-h-0 flex-1 overflow-hidden ${
+          isHomeTab || isChatTab || isSettingsTab || isMattingTab ? '' : 'bg-slate-950/[0.86] backdrop-blur-md'
+        }`}
       >
         <div
           className={
-            isCanvasTab
-              ? 'h-full min-h-0 w-full bg-slate-950'
-              : isChatTab
-                ? 'mx-auto h-full min-h-0 max-w-7xl px-6 pb-10 pt-8'
-                : isHomeTab
-                  ? 'mx-auto flex h-full min-h-0 w-full max-w-6xl flex-col px-5 pb-10 pt-6 sm:px-8 sm:pb-12 sm:pt-8'
-                  : 'mx-auto h-full min-h-0 max-w-7xl px-6 py-8'
+            isMattingTab
+              ? 'relative flex h-full min-h-0 w-full flex-col px-3 pb-3 pt-2 sm:px-5 sm:pb-4 sm:pt-3'
+              : isCanvasTab
+                ? `h-full min-h-0 w-full ${activeTab === 'output-tool' ? 'bg-slate-950/40' : 'bg-slate-950'}`
+                : isChatTab
+                  ? 'relative mx-auto flex h-full min-h-0 w-full max-w-[47.92rem] flex-col px-4 pb-[4.887rem] pt-6 sm:max-w-[55.91rem] sm:px-5 sm:pb-[5.7rem] sm:pt-8'
+                  : isHomeTab
+                    ? 'mx-auto flex h-full min-h-0 w-full max-w-none flex-col px-5 pb-10 pt-6 sm:px-8 sm:pb-12 sm:pt-8'
+                    : isSettingsTab
+                      ? 'relative mx-auto flex h-full min-h-0 w-full max-w-none flex-col px-5 pb-10 pt-6 sm:px-8 sm:pb-12 sm:pt-8'
+                      : 'mx-auto h-full min-h-0 max-w-7xl px-6 py-8'
           }
         >
           {children}

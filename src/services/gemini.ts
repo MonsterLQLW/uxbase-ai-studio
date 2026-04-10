@@ -165,7 +165,6 @@ export interface ChatMessage {
 export async function chatWithGemini(messages: ChatMessage[]) {
   const lastMsg = messages[messages.length - 1]
 
-  // 构建 parts
   const parts: any[] = [{ text: lastMsg.text }]
   if (lastMsg.imageData) {
     parts.push({
@@ -176,25 +175,57 @@ export async function chatWithGemini(messages: ChatMessage[]) {
     })
   }
 
-  // 如果有历史消息，用 chats 接口
-  if (messages.length > 1) {
-    const chat = getAI().chats.create({
-      model: MODEL,
-      history: messages.slice(0, -1).map(m => ({
-        role: m.role,
-        parts: [{ text: m.text }],
-      })),
-    })
-    const result = await chat.sendMessage({ message: parts })
-    return (await extractGeminiText(result)) || ''
+  const maxAttempts = 4
+  const baseDelayMs = 700
+  let lastErr: unknown = null
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      if (messages.length > 1) {
+        const chat = getAI().chats.create({
+          model: MODEL,
+          history: messages.slice(0, -1).map(m => ({
+            role: m.role,
+            parts: [{ text: m.text }],
+          })),
+        })
+        const result = await chat.sendMessage({ message: parts })
+        return (await extractGeminiText(result)) || ''
+      }
+
+      const result = await getAI().models.generateContent({
+        model: MODEL,
+        contents: [{ role: 'user', parts }],
+      })
+      return (await extractGeminiText(result)) || ''
+    } catch (e: unknown) {
+      lastErr = e
+      const norm = normalizeGenAIError(e)
+      const lower = (norm.message || '').toLowerCase()
+      const isUnavailable =
+        norm.status === 503 || norm.code === 'UNAVAILABLE' || lower.includes('unavailable') || lower.includes('high demand')
+      const isRateLimited =
+        norm.status === 429 || lower.includes('quota') || lower.includes('resource exhausted') || lower.includes('rate')
+
+      if ((isUnavailable || isRateLimited) && attempt < maxAttempts) {
+        await sleep(baseDelayMs * attempt)
+        continue
+      }
+
+      if (isUnavailable) {
+        throw new Error(
+          'Gemini 当前访问量较高（503，服务端短时不可用）。请隔几十秒再试，或切换到 TIMI；带图时可稍后再发或减少图片尺寸。',
+        )
+      }
+      if (isRateLimited) {
+        throw new Error('请求过于频繁或配额受限（429）。请稍后再试，或到 Google AI Studio 查看配额。')
+      }
+      throw new Error(norm.message || '请求失败')
+    }
   }
 
-  // 单条消息
-  const result = await getAI().models.generateContent({
-    model: MODEL,
-    contents: [{ role: 'user', parts }],
-  })
-  return (await extractGeminiText(result)) || ''
+  const norm = normalizeGenAIError(lastErr)
+  throw new Error(norm.message || '请求失败')
 }
 
 type GenerateOptions = {

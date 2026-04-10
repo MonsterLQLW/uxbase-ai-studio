@@ -1,7 +1,9 @@
 import { useState, useEffect, lazy, Suspense, Component, type ReactNode } from 'react'
 import Layout, { type Tab } from './components/Layout'
 import HomePage from './components/HomePage'
+import HomeStyleBackdrop from './components/HomeStyleBackdrop'
 import AuroraBg from './components/AuroraBg'
+import { Settings, Sparkles } from 'lucide-react'
 import ChatPanel from './components/ChatPanel'
 import { setGeminiKey as setGeminiKeyService, setTIMIKey, setTIMIUrl, setTIMIModel, testGeminiConnection, testTIMIConnection } from './services/gemini'
 import type { FlowState as AvatarFlowState } from './components/AvatarFrameDesigner'
@@ -197,128 +199,168 @@ function SettingsPanel({
     }
   }
 
-  return (
-    <div className="h-full p-6 overflow-y-auto">
-      <div className="max-w-4xl mx-auto">
-        <h2 className="text-3xl font-bold text-slate-100 mb-8 text-center">⚙️ 设置</h2>
+  const inputClass =
+    'w-full rounded-xl border border-white/12 bg-slate-950/50 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-500 focus:border-violet-400/45 focus:outline-none focus:ring-2 focus:ring-violet-500/15'
+  const inputClassMono =
+    'w-full rounded-xl border border-white/12 bg-slate-950/50 px-4 py-2.5 font-mono text-xs text-slate-100 placeholder:text-slate-500 focus:border-violet-400/45 focus:outline-none focus:ring-2 focus:ring-violet-500/15'
+  const cardClass =
+    'rounded-2xl border border-white/[0.08] bg-slate-950/40 p-6 shadow-[0_12px_48px_rgba(0,0,0,0.38)] backdrop-blur-xl ring-1 ring-white/[0.05]'
 
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          <div className="bg-slate-900 rounded-3xl p-6 border border-slate-800 shadow-lg">
-            <h3 className="text-lg font-semibold text-slate-300 mb-4">API 配置</h3>
-            <div className="space-y-4">
+  return (
+    <div className="relative h-full min-h-0 overflow-y-auto [scrollbar-color:rgba(100,116,139,0.45)_transparent]">
+      <HomeStyleBackdrop omitSideGlow />
+      <div className="relative z-0 mx-auto max-w-5xl pb-12 pt-2 sm:pt-4">
+        <div className="mb-10 text-center">
+          <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-violet-400/25 bg-violet-500/[0.08] px-4 py-2 text-xs font-medium text-violet-100 shadow-[0_0_24px_rgba(139,92,246,0.15)] backdrop-blur-md">
+            <Sparkles className="h-3.5 w-3.5 shrink-0 text-violet-300" strokeWidth={2} />
+            <span>Gemini · TIMI · 连接与偏好</span>
+          </div>
+          <h2 className="font-brand flex items-center justify-center gap-3 text-3xl font-semibold tracking-tight text-transparent sm:text-4xl">
+            <Settings className="h-8 w-8 shrink-0 text-violet-300/90 sm:h-9 sm:w-9" strokeWidth={1.75} />
+            <span className="bg-gradient-to-r from-violet-200 via-white to-cyan-200 bg-clip-text drop-shadow-[0_0_28px_rgba(139,92,246,0.2)]">
+              设置
+            </span>
+          </h2>
+          <p className="mx-auto mt-3 max-w-lg text-sm leading-relaxed text-slate-400">
+            与首页同一套光斑与玻璃质感。在此配置密钥、测试连通性并查看模型说明。
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+          <div className={cardClass}>
+            <h3 className="mb-1 text-sm font-semibold uppercase tracking-wider text-violet-200/85">API 配置</h3>
+            <p className="mb-5 text-xs text-slate-500">密钥仅保存在本机浏览器，不会上传至第三方。</p>
+            <div className="space-y-6">
               <div>
-                <label className="text-sm text-slate-400 mb-2 block">Google Gemini API Key</label>
+                <label className="mb-2 block text-sm font-medium text-slate-300">Google Gemini API Key</label>
                 <input
                   type="password"
                   placeholder="填入你的 API Key"
                   value={geminiKey}
                   onChange={e => setGeminiKey(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-sm text-slate-200 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  className={inputClass}
                 />
                 <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
                   <button
+                    type="button"
                     onClick={testGeminiConnectionHandler}
                     disabled={geminiResult === 'testing' || !geminiKey.trim()}
-                    className="px-4 py-3 bg-sky-600 hover:bg-sky-700 disabled:bg-slate-900 disabled:text-slate-400 text-sm text-white rounded-xl transition"
+                    className="rounded-xl bg-gradient-to-br from-sky-500 to-cyan-600 px-4 py-3 text-sm font-medium text-white shadow-[0_8px_28px_rgba(14,165,233,0.35)] transition hover:from-sky-400 hover:to-cyan-500 disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none"
                   >
                     {geminiResult === 'testing' ? '测试中...' : '测试 Gemini 连接'}
                   </button>
-                  {geminiResult === 'success' && <span className="text-xs text-green-400">✅ Gemini 已连接</span>}
-                  {geminiResult === 'error' && <span className="text-xs text-red-400">❌ Gemini 连接失败</span>}
+                  {geminiResult === 'success' && <span className="text-xs text-emerald-300/95">✅ Gemini 已连接</span>}
+                  {geminiResult === 'error' && <span className="text-xs text-red-300/95">❌ Gemini 连接失败</span>}
                 </div>
                 {geminiTestDetail && (
                   <p
-                    className={`text-xs mt-2 leading-relaxed ${
-                      geminiResult === 'success' ? 'text-green-300/90' : 'text-red-300/90'
+                    className={`mt-2 text-xs leading-relaxed ${
+                      geminiResult === 'success' ? 'text-emerald-300/90' : 'text-red-300/90'
                     }`}
                   >
                     {geminiTestDetail}
                   </p>
                 )}
-                <p className="text-xs text-slate-500 mt-2">
-                  获取地址: {' '}
+                <p className="mt-2 text-xs text-slate-500">
+                  获取地址{' '}
                   <a
                     href="https://aistudio.google.com/app/apikey"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-blue-400 hover:underline"
+                    className="text-cyan-300/90 underline decoration-cyan-500/40 underline-offset-2 transition hover:text-cyan-200"
                   >
                     aistudio.google.com/app/apikey
                   </a>
                 </p>
               </div>
 
-              <div>
-                <label className="text-sm text-slate-400 mb-2 block">TIMI AI API Key</label>
+              <div className="border-t border-white/[0.06] pt-6">
+                <label className="mb-2 block text-sm font-medium text-slate-300">TIMI AI API Key</label>
                 <input
                   type="password"
                   placeholder="填入 TIMI AI API Key"
                   value={timiKey}
                   onChange={e => setTimiKey(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-sm text-slate-200 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  className={inputClass}
                 />
                 <div className="mt-3 space-y-3">
                   <div>
-                    <label className="text-xs text-slate-500 mb-1 block">API 地址</label>
+                    <label className="mb-1 block text-xs font-medium text-slate-500">API 地址</label>
                     <input
                       type="text"
                       placeholder="填入 TIMI API 地址"
                       value={timiUrl}
                       onChange={e => onSetTimiUrl(e.target.value)}
-                      className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-mono"
+                      className={inputClassMono}
                     />
                   </div>
                   <div>
-                    <label className="text-xs text-slate-500 mb-1 block">模型名称</label>
+                    <label className="mb-1 block text-xs font-medium text-slate-500">模型名称</label>
                     <input
                       type="text"
                       placeholder="gpt-5"
                       value={timiModel}
                       onChange={e => setTimiModel(e.target.value)}
-                      className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                      className={inputClassMono}
                     />
                   </div>
                   <button
+                    type="button"
                     onClick={testTIMIConnectionHandler}
                     disabled={timiResult === 'testing' || !timiKey}
-                    className="px-4 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-900 disabled:text-slate-400 text-sm text-white rounded-xl transition"
+                    className="rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 px-4 py-3 text-sm font-medium text-white shadow-[0_8px_28px_rgba(99,102,241,0.38)] transition hover:from-indigo-400 hover:to-violet-500 disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none"
                   >
                     {timiResult === 'testing' ? '测试中...' : '测试 TIMI 连接'}
                   </button>
-                  {timiResult === 'success' && <p className="text-xs text-green-400">✅ {timiTestDetail || 'TIMI 已连接'}</p>}
-                  {timiResult === 'error' && <p className="text-xs text-red-400">❌ {timiTestDetail || 'TIMI 连接失败'}<br />💡 请确保：① 在内网环境下 ② 已填写 API Key ③ API 地址正确</p>}
+                  {timiResult === 'success' && <p className="text-xs text-emerald-300/95">✅ {timiTestDetail || 'TIMI 已连接'}</p>}
+                  {timiResult === 'error' && (
+                    <p className="text-xs leading-relaxed text-red-300/95">
+                      ❌ {timiTestDetail || 'TIMI 连接失败'}
+                      <br />
+                      <span className="text-slate-500">请确认内网环境、API Key 与地址是否正确。</span>
+                    </p>
+                  )}
                 </div>
-                <p className="text-xs text-slate-500 mt-2">TIMI AI 内部模型代理服务，支持多种模型（chat/completions）<br />⚠️ 需要在内部网络环境下使用，并填写自己的 API Key</p>
+                <p className="mt-3 text-xs leading-relaxed text-slate-500">
+                  TIMI 为内部模型代理，支持 chat / completions。
+                  <br />
+                  <span className="text-amber-400/80">需在内部网络使用并自备 API Key。</span>
+                </p>
               </div>
             </div>
           </div>
 
-          <div className="bg-slate-900 rounded-3xl p-6 border border-slate-800 shadow-lg">
-            <h3 className="text-lg font-semibold text-slate-300 mb-4">模型设置</h3>
+          <div className={cardClass}>
+            <h3 className="mb-1 text-sm font-semibold uppercase tracking-wider text-violet-200/85">模型设置</h3>
+            <p className="mb-5 text-xs text-slate-500">默认能力说明（与部分功能页的模型选项对应）。</p>
             <div className="space-y-3">
-              <label className="flex items-center gap-3 p-4 rounded-2xl bg-slate-800 border border-blue-500/50 cursor-pointer hover:bg-slate-700 transition">
-                <input type="radio" name="model" value="gemini-2.5-flash" defaultChecked className="accent-blue-500" />
+              <label className="flex cursor-pointer items-center gap-3 rounded-2xl border border-violet-400/35 bg-violet-500/[0.08] p-4 backdrop-blur-sm transition hover:border-violet-400/50 hover:bg-violet-500/12">
+                <input type="radio" name="model" value="gemini-2.5-flash" defaultChecked className="accent-violet-400" />
                 <div>
-                  <div className="text-sm font-medium text-slate-200">Gemini 2.5 Flash</div>
-                  <div className="text-xs text-slate-500">免费 · 速度快 · 支持图片</div>
+                  <div className="text-sm font-medium text-slate-100">Gemini 2.5 Flash</div>
+                  <div className="text-xs text-slate-400">免费 · 速度快 · 支持图片</div>
                 </div>
               </label>
-              <label className="flex items-center gap-3 p-4 rounded-2xl bg-slate-800 border border-slate-700 cursor-pointer hover:bg-slate-700 transition">
-                <input type="radio" name="model" value="gemini-3-flash-preview" className="accent-blue-500" />
+              <label className="flex cursor-pointer items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.04] p-4 backdrop-blur-sm transition hover:border-white/18 hover:bg-white/[0.07]">
+                <input type="radio" name="model" value="gemini-3-flash-preview" className="accent-violet-400" />
                 <div>
-                  <div className="text-sm font-medium text-slate-200">Gemini 3 Flash</div>
-                  <div className="text-xs text-slate-500">最新 · 推理能力更强</div>
+                  <div className="text-sm font-medium text-slate-100">Gemini 3 Flash</div>
+                  <div className="text-xs text-slate-400">最新 · 推理能力更强</div>
                 </div>
               </label>
             </div>
           </div>
 
-          <div className="xl:col-span-2 bg-slate-900 rounded-3xl p-6 border border-slate-800 shadow-lg">
-            <h3 className="text-lg font-semibold text-slate-300 mb-4">关于</h3>
-            <div className="text-sm text-slate-400 space-y-2">
-              <p>UXbase AI Studio</p>
-              <p>基于 React 19 + Tailwind CSS + Three.js</p>
-              <p>AI 模型: Google Gemini</p>
+          <div className={`${cardClass} xl:col-span-2`}>
+            <h3 className="mb-1 text-sm font-semibold uppercase tracking-wider text-violet-200/85">关于</h3>
+            <p className="mb-4 text-xs text-slate-500">UXbase AI Studio 工作台信息</p>
+            <div className="space-y-2 text-sm text-slate-300/95">
+              <p className="font-medium text-slate-100">UXbase AI Studio</p>
+              <p className="text-slate-400">React 19 · Tailwind CSS · Three.js</p>
+              <p className="text-slate-400">
+                默认对话与创作能力：<span className="text-cyan-200/90">Google Gemini</span> ·{' '}
+                <span className="text-violet-200/90">TIMI</span>
+              </p>
             </div>
           </div>
         </div>
@@ -556,7 +598,14 @@ export default function App() {
       <AuroraBg />
       <Layout activeTab={activeTab} onTabChange={setActiveTab}>
         {activeTab === 'home' && <HomePage onNavigate={setActiveTab} />}
-        {activeTab === 'chat' && <ChatPanel />}
+        {/* 常驻挂载：切到其他 Tab 不卸载，保留消息、输入与进行中的请求 */}
+        <div
+          hidden={activeTab !== 'chat'}
+          className="h-full min-h-0 min-w-0 flex flex-col"
+          aria-hidden={activeTab !== 'chat'}
+        >
+          <ChatPanel />
+        </div>
         {activeTab === 'avatar-frame' && (
           <div className="w-full h-full relative">
             <ErrorBoundary>

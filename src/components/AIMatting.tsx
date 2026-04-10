@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Scissors, Sparkles } from 'lucide-react'
+import HomeStyleBackdrop from './HomeStyleBackdrop'
 
 type Mode = 'solid' | 'glass'
 type RGB = { r: number; g: number; b: number }
@@ -703,39 +705,49 @@ export default function AIMatting({
     [isPicking, mode, process, stopPicking],
   )
 
+  const cardClass =
+    'rounded-2xl border border-white/[0.08] bg-slate-950/40 p-3 shadow-[0_8px_32px_rgba(0,0,0,0.28)] backdrop-blur-md ring-1 ring-white/[0.04]'
+  const btnGhost =
+    'rounded-xl border border-white/12 bg-white/[0.06] px-3 py-2 text-xs font-medium text-slate-200 transition hover:border-white/20 hover:bg-white/[0.1]'
+
   return (
-    <div
-      className="h-full flex overflow-hidden rounded-3xl border border-slate-800/70 bg-slate-950/30 shadow-[0_0_0_1px_rgba(255,255,255,0.03),0_24px_80px_rgba(0,0,0,0.55)] relative"
-      onContextMenu={e => {
-        e.preventDefault()
-        setCtxMenu({ x: e.clientX, y: e.clientY })
-      }}
-    >
+    <div className="relative flex h-full min-h-0 w-full flex-col overflow-hidden">
+      <HomeStyleBackdrop omitSideGlow />
+      <div
+        className="relative z-0 flex min-h-0 flex-1 flex-row overflow-hidden rounded-2xl border border-white/[0.08] bg-slate-950/35 shadow-[0_12px_48px_rgba(0,0,0,0.38)] backdrop-blur-xl ring-1 ring-white/[0.05] sm:rounded-3xl"
+        onContextMenu={e => {
+          e.preventDefault()
+          setCtxMenu({ x: e.clientX, y: e.clientY })
+        }}
+      >
       {/* Sidebar */}
-      <div className="w-[392px] shrink-0 border-r border-slate-800/70 bg-slate-900/55 backdrop-blur-xl p-4 overflow-y-auto">
-        <div className="pb-3 border-b border-slate-800/70">
+      <div className="w-[min(100%,392px)] sm:w-[392px] shrink-0 border-r border-white/[0.08] bg-slate-950/30 p-4 backdrop-blur-xl [scrollbar-color:rgba(100,116,139,0.45)_transparent] overflow-y-auto">
+        <div className="pb-3 border-b border-white/[0.06]">
+          <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-violet-400/25 bg-violet-500/[0.08] px-3 py-1.5 text-[10px] font-medium text-violet-100 shadow-[0_0_24px_rgba(139,92,246,0.12)] backdrop-blur-md sm:px-4 sm:text-xs">
+            <Sparkles className="h-3 w-3 shrink-0 text-violet-300 sm:h-3.5 sm:w-3.5" strokeWidth={2} />
+            <span>本地像素 · 无需联网</span>
+          </div>
           <div className="flex items-center justify-between gap-3">
-            <div>
-              <div className="text-base font-semibold text-slate-100 tracking-tight">智能抠图</div>
-              <div className="text-[11px] text-slate-400 mt-0.5">通用/实物 · 透明/玻璃 · 本地像素算法</div>
+            <div className="min-w-0">
+              <h2 className="font-brand flex items-center gap-2 text-lg font-semibold tracking-tight text-transparent sm:text-xl">
+                <Scissors className="h-5 w-5 shrink-0 text-violet-300/90 sm:h-6 sm:w-6" strokeWidth={1.75} />
+                <span className="bg-gradient-to-r from-violet-200 via-white to-cyan-200 bg-clip-text drop-shadow-[0_0_20px_rgba(139,92,246,0.18)]">
+                  智能抠图
+                </span>
+              </h2>
+              <p className="mt-1 text-[11px] leading-relaxed text-slate-400">通用/实物 · 透明/玻璃 · 本地算法，参数实时预览</p>
             </div>
-            <span className="text-[10px] px-2 py-1 rounded-full border border-slate-800/70 bg-slate-950/40 text-slate-400">
+            <span className="shrink-0 rounded-full border border-white/12 bg-white/[0.06] px-2 py-1 text-[10px] text-slate-400 backdrop-blur">
               v6
             </span>
           </div>
         </div>
 
         <div className="mt-3 grid grid-cols-2 gap-2">
-          <button
-            className="rounded-xl border border-slate-800/70 bg-slate-950/30 px-3 py-2 text-xs text-slate-200 hover:bg-slate-950/45 hover:border-slate-700/70 transition"
-            onClick={resetParams}
-          >
+          <button type="button" className={btnGhost} onClick={resetParams}>
             ↺ 重置参数
           </button>
-          <button
-            className="rounded-xl border border-slate-800/70 bg-slate-950/30 px-3 py-2 text-xs text-slate-200 hover:bg-slate-950/45 hover:border-slate-700/70 transition"
-            onClick={() => fileRef.current?.click()}
-          >
+          <button type="button" className={btnGhost} onClick={() => fileRef.current?.click()}>
             📂 换图
           </button>
           <input
@@ -751,11 +763,12 @@ export default function AIMatting({
           />
         </div>
 
-        <div className="mt-3 rounded-2xl border border-slate-800/70 bg-slate-950/35 p-3">
-          <div className="text-[11px] font-semibold text-slate-300 mb-2">视觉辅助（按住）</div>
+        <div className={`mt-3 ${cardClass}`}>
+          <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-violet-200/80">视觉辅助（按住）</div>
           <div className="grid grid-cols-2 gap-2">
             <button
-              className="rounded-xl border border-slate-800/70 bg-slate-950/20 px-3 py-2 text-xs text-slate-200 hover:bg-slate-950/35 hover:border-slate-700/70 transition"
+              type="button"
+              className={btnGhost}
               onPointerDown={() => setIsWhiteBg(true)}
               onPointerUp={() => setIsWhiteBg(false)}
               onPointerLeave={() => setIsWhiteBg(false)}
@@ -763,7 +776,8 @@ export default function AIMatting({
               ⬜ 白底预览
             </button>
             <button
-              className="rounded-xl border border-slate-800/70 bg-slate-950/20 px-3 py-2 text-xs text-slate-200 hover:bg-slate-950/35 hover:border-slate-700/70 transition"
+              type="button"
+              className={btnGhost}
               onPointerDown={() => {
                 if (isPicking) return
                 drawOriginal()
@@ -783,12 +797,13 @@ export default function AIMatting({
         </div>
 
         {/* Mode tabs */}
-        <div className="mt-3 flex gap-1 rounded-2xl bg-slate-950/35 p-1 border border-slate-800/70">
+        <div className="mt-3 flex gap-1 rounded-2xl border border-white/[0.08] bg-white/[0.04] p-1 backdrop-blur-md ring-1 ring-white/[0.04]">
           <button
-            className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition ${
+            type="button"
+            className={`flex-1 rounded-xl px-3 py-2 text-sm font-semibold transition ${
               mode === 'solid'
-                ? 'bg-indigo-500/90 text-white shadow-[0_10px_30px_rgba(99,102,241,0.22)]'
-                : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
+                ? 'border border-violet-400/35 bg-violet-500/25 text-violet-100 shadow-[0_0_20px_rgba(139,92,246,0.15)]'
+                : 'border border-transparent text-slate-400 hover:bg-white/[0.06] hover:text-slate-200'
             }`}
             onClick={() => {
               setMode('solid')
@@ -798,10 +813,11 @@ export default function AIMatting({
             通用 / 实物
           </button>
           <button
-            className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition ${
+            type="button"
+            className={`flex-1 rounded-xl px-3 py-2 text-sm font-semibold transition ${
               mode === 'glass'
-                ? 'bg-cyan-300/90 text-slate-950 shadow-[0_10px_30px_rgba(34,211,238,0.18)]'
-                : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
+                ? 'border border-cyan-400/35 bg-sky-500/20 text-sky-100 shadow-[0_0_20px_rgba(14,165,233,0.14)]'
+                : 'border border-transparent text-slate-400 hover:bg-white/[0.06] hover:text-slate-200'
             }`}
             onClick={() => {
               setMode('glass')
@@ -815,13 +831,14 @@ export default function AIMatting({
         {/* Solid panel */}
         {mode === 'solid' && (
           <div className="mt-3 space-y-3">
-            <div className="rounded-2xl border border-slate-800/70 bg-slate-950/35 p-3">
-              <div className="text-[11px] font-semibold text-slate-300 mb-2">吸管点杀（去除残留）</div>
+            <div className={cardClass}>
+              <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-violet-200/80">吸管点杀（去除残留）</div>
               <button
-                className={`w-full rounded-lg px-3 py-2 text-xs border transition ${
+                type="button"
+                className={`w-full rounded-xl border px-3 py-2 text-xs font-medium transition ${
                   isPicking
-                    ? 'bg-indigo-500/90 text-white border-indigo-300/50'
-                    : 'bg-slate-950/20 border-slate-800/70 text-slate-200 hover:bg-slate-950/35 hover:border-slate-700/70'
+                    ? 'border-violet-400/45 bg-violet-500/30 text-violet-50 shadow-[0_0_20px_rgba(139,92,246,0.2)]'
+                    : 'border-white/12 bg-white/[0.06] text-slate-200 hover:border-white/20 hover:bg-white/[0.1]'
                 }`}
                 onClick={onPickClick}
                 disabled={!originalImgRef.current}
@@ -831,11 +848,12 @@ export default function AIMatting({
               </button>
               <div className="mt-2 text-[11px] text-slate-400">已选颜色（点击删除）</div>
               <div className="mt-2 flex flex-wrap gap-2">
-                {customColors.length === 0 && <div className="text-[11px] text-slate-600">（无）</div>}
+                {customColors.length === 0 && <div className="text-[11px] text-slate-500">（无）</div>}
                 {customColors.map((c, idx) => (
                   <button
+                    type="button"
                     key={idx}
-                    className="w-6 h-6 rounded-full border border-white/70 shadow-[0_10px_20px_rgba(0,0,0,0.35)]"
+                    className="h-6 w-6 rounded-full border border-white/70 shadow-[0_10px_20px_rgba(0,0,0,0.35)]"
                     style={{ backgroundColor: `rgb(${c.r},${c.g},${c.b})` }}
                     title={`删除 RGB(${c.r},${c.g},${c.b})`}
                     onClick={() => setCustomColors(prev => prev.filter((_, i) => i !== idx))}
@@ -844,14 +862,14 @@ export default function AIMatting({
               </div>
             </div>
 
-            <div className="rounded-2xl border border-slate-800/70 bg-slate-950/35 p-3">
-              <div className="text-[11px] font-semibold text-slate-300 mb-2">智能识别</div>
+            <div className={cardClass}>
+              <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-violet-200/80">智能识别</div>
               <Slider label="色彩容差 (Tolerance)" value={sTolerance} onChange={setSTolerance} min={1} max={100} accent="indigo" />
               <Slider label="去黑增强 (Black)" value={sBlack} onChange={setSBlack} min={0} max={100} accent="indigo" />
             </div>
 
-            <div className="rounded-2xl border border-slate-800/70 bg-slate-950/35 p-3">
-              <div className="text-[11px] font-semibold text-slate-300 mb-2">边缘重构</div>
+            <div className={cardClass}>
+              <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-violet-200/80">边缘重构</div>
               <Slider label="智能平滑 (Liquid)" value={sSmooth} onChange={setSSmooth} min={0} max={100} accent="indigo" />
               <Slider label="羽化半径 (Blur)" value={sBlur} onChange={setSBlur} min={0} max={100} accent="indigo" />
               <Slider label="边缘收缩 (Shift)" value={sShift} onChange={setSShift} min={-20} max={20} accent="indigo" />
@@ -862,8 +880,8 @@ export default function AIMatting({
         {/* Glass panel */}
         {mode === 'glass' && (
           <div className="mt-3 space-y-3">
-            <div className="rounded-2xl border border-slate-800/70 bg-slate-950/35 p-3">
-              <div className="text-[11px] font-semibold text-slate-300 mb-2">透明材质参数</div>
+            <div className={cardClass}>
+              <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-cyan-200/80">透明材质参数</div>
               <Slider label="背景阈值 (Threshold)" value={gThresh} onChange={setGThresh} min={1} max={100} accent="cyan" />
               <Slider label="边缘羽化 (Feather)" value={gFeather} onChange={setGFeather} min={0} max={40} accent="cyan" />
               <Slider label="高光增强 (Highlight)" value={gBoost} onChange={setGBoost} min={0} max={100} accent="cyan" />
@@ -875,14 +893,16 @@ export default function AIMatting({
 
         <div className="mt-4 space-y-2">
           <button
-            className="w-full rounded-2xl bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-900 disabled:text-slate-500 px-4 py-3 text-sm font-semibold text-white transition shadow-[0_18px_40px_rgba(79,70,229,0.22)]"
+            type="button"
+            className="w-full rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 px-4 py-3 text-sm font-semibold text-white shadow-[0_8px_28px_rgba(99,102,241,0.38)] transition hover:from-indigo-400 hover:to-violet-500 disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none"
             onClick={process}
             disabled={!canProcess || loading}
           >
             {loading ? '正在精细计算…' : '⚡ 智能处理'}
           </button>
           <button
-            className="w-full rounded-2xl border border-slate-800/70 bg-slate-950/25 px-4 py-3 text-sm font-semibold text-slate-200 hover:bg-slate-950/40 hover:border-slate-700/70 disabled:text-slate-600 transition"
+            type="button"
+            className="w-full rounded-2xl border border-white/12 bg-slate-950/40 px-4 py-3 text-sm font-semibold text-slate-200 backdrop-blur-md transition hover:border-white/20 hover:bg-slate-950/55 disabled:cursor-not-allowed disabled:opacity-40"
             onClick={download}
             disabled={!processed}
           >
@@ -893,12 +913,13 @@ export default function AIMatting({
 
       {ctxMenu && (
         <div
-          className="fixed z-50 min-w-[160px] rounded-xl border border-slate-800 bg-slate-950/95 backdrop-blur shadow-[0_18px_60px_rgba(0,0,0,0.55)] overflow-hidden"
+          className="fixed z-50 min-w-[160px] overflow-hidden rounded-xl border border-white/[0.1] bg-slate-950/90 shadow-[0_18px_60px_rgba(0,0,0,0.45)] backdrop-blur-xl ring-1 ring-white/[0.06]"
           style={{ left: ctxMenu.x, top: ctxMenu.y }}
           onMouseDown={e => e.stopPropagation()}
         >
           <button
-            className="w-full text-left px-3 py-2 text-sm text-slate-200 hover:bg-slate-800/60 transition"
+            type="button"
+            className="w-full px-3 py-2 text-left text-sm text-slate-200 transition hover:bg-white/[0.08]"
             onClick={() => {
               setCtxMenu(null)
               clearCanvas()
@@ -911,18 +932,19 @@ export default function AIMatting({
 
       {/* Workspace */}
       <div
-        className={`flex-1 relative flex items-center justify-center ${
+        className={`relative flex min-w-0 flex-1 items-center justify-center ${
           isPicking ? 'cursor-crosshair' : 'cursor-default'
         } ${
           isWhiteBg
             ? 'bg-white'
-            : 'bg-slate-950 bg-[linear-gradient(45deg,rgba(30,41,59,0.55)_25%,transparent_25%),linear-gradient(-45deg,rgba(30,41,59,0.55)_25%,transparent_25%),linear-gradient(45deg,transparent_75%,rgba(30,41,59,0.55)_75%),linear-gradient(-45deg,transparent_75%,rgba(30,41,59,0.55)_75%)] bg-[length:24px_24px] bg-[position:0_0,0_12px,12px_-12px,-12px_0]'
+            : 'bg-slate-950/80 bg-[linear-gradient(45deg,rgba(148,163,184,0.12)_25%,transparent_25%),linear-gradient(-45deg,rgba(148,163,184,0.12)_25%,transparent_25%),linear-gradient(45deg,transparent_75%,rgba(148,163,184,0.12)_75%),linear-gradient(-45deg,transparent_75%,rgba(148,163,184,0.12)_75%)] bg-[length:24px_24px] bg-[position:0_0,0_12px,12px_-12px,-12px_0]'
         }`}
       >
         {/* 操作记录：撤回/前调 */}
-        <div className="absolute top-4 right-4 z-20 flex items-center gap-2">
+        <div className="absolute right-4 top-4 z-20 flex items-center gap-2">
           <button
-            className="h-9 w-9 rounded-xl border border-slate-800/70 bg-slate-950/60 backdrop-blur text-slate-200 hover:bg-slate-950/75 hover:border-slate-700/70 disabled:opacity-40 disabled:hover:bg-slate-950/60 transition"
+            type="button"
+            className="h-9 w-9 rounded-xl border border-white/[0.1] bg-slate-950/50 text-slate-200 shadow-[0_8px_24px_rgba(0,0,0,0.25)] backdrop-blur-md transition hover:border-white/20 hover:bg-slate-950/65 disabled:opacity-40"
             onClick={undo}
             disabled={historyPast.length === 0}
             title="撤回"
@@ -930,7 +952,8 @@ export default function AIMatting({
             ←
           </button>
           <button
-            className="h-9 w-9 rounded-xl border border-slate-800/70 bg-slate-950/60 backdrop-blur text-slate-200 hover:bg-slate-950/75 hover:border-slate-700/70 disabled:opacity-40 disabled:hover:bg-slate-950/60 transition"
+            type="button"
+            className="h-9 w-9 rounded-xl border border-white/[0.1] bg-slate-950/50 text-slate-200 shadow-[0_8px_24px_rgba(0,0,0,0.25)] backdrop-blur-md transition hover:border-white/20 hover:bg-slate-950/65 disabled:opacity-40"
             onClick={redo}
             disabled={historyFuture.length === 0}
             title="前调"
@@ -939,30 +962,34 @@ export default function AIMatting({
           </button>
         </div>
         {!originalImgRef.current && (
-          <div className="absolute inset-0 flex items-center justify-center bg-slate-950/70">
+          <div className="absolute inset-0 flex items-center justify-center bg-slate-950/40 backdrop-blur-[2px]">
             <button
-              className="group rounded-3xl border border-slate-800/70 bg-slate-950/35 px-10 py-10 text-center hover:bg-slate-950/45 transition shadow-[0_24px_80px_rgba(0,0,0,0.55)]"
+              type="button"
+              className="group rounded-3xl border border-white/[0.1] bg-slate-950/45 px-10 py-10 text-center shadow-[0_12px_48px_rgba(0,0,0,0.35)] backdrop-blur-xl ring-1 ring-white/[0.06] transition hover:border-violet-400/25 hover:bg-slate-950/55"
               onClick={() => fileRef.current?.click()}
             >
-              <div className="mx-auto w-12 h-12 rounded-2xl bg-indigo-500/15 border border-indigo-500/25 flex items-center justify-center text-2xl mb-4 group-hover:bg-indigo-500/18 transition">
+              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl border border-violet-400/30 bg-violet-500/[0.12] text-2xl transition group-hover:bg-violet-500/[0.18]">
                 📷
               </div>
-              <div className="text-lg font-semibold text-slate-100">点击上传图片</div>
-              <div className="text-xs text-slate-400 mt-2">支持 JPG / PNG / WebP</div>
+              <div className="font-brand bg-gradient-to-r from-violet-200 via-white to-cyan-200 bg-clip-text text-lg font-semibold text-transparent">
+                点击上传图片
+              </div>
+              <div className="mt-2 text-xs text-slate-400">支持 JPG / PNG / WebP</div>
             </button>
           </div>
         )}
         <canvas
           ref={canvasRef}
           onClick={onCanvasClick}
-          className="max-w-[92%] max-h-[92%] rounded-2xl shadow-[0_28px_90px_rgba(0,0,0,0.65)]"
+          className="max-h-[92%] max-w-[92%] rounded-2xl shadow-[0_24px_70px_rgba(0,0,0,0.45)] ring-1 ring-white/[0.06]"
         />
         {loading && (
-          <div className="absolute bottom-6 flex items-center gap-2 rounded-full border border-slate-800/70 bg-slate-950/70 backdrop-blur px-4 py-2 text-xs text-slate-100 shadow-[0_18px_60px_rgba(0,0,0,0.5)]">
-            <div className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
+          <div className="absolute bottom-6 flex items-center gap-2 rounded-full border border-white/[0.1] bg-slate-950/70 px-4 py-2 text-xs text-slate-100 shadow-[0_12px_40px_rgba(0,0,0,0.35)] backdrop-blur-md">
+            <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
             正在精细计算…
           </div>
         )}
+      </div>
       </div>
     </div>
   )
@@ -998,7 +1025,7 @@ function Slider({
         step={1}
         value={value}
         onChange={e => onChange(Number(e.target.value))}
-        className={`w-full h-1.5 rounded-full bg-slate-800/80 cursor-pointer ${accentCls}`}
+        className={`h-1.5 w-full cursor-pointer rounded-full bg-white/[0.1] ${accentCls}`}
       />
     </div>
   )

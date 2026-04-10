@@ -239,8 +239,10 @@ type OutputNodeData = {
 
 function OtShell({ title, children, className = '' }: { title: string; children: React.ReactNode; className?: string }) {
   return (
-    <div className={`rounded-xl border border-slate-700 bg-slate-900/90 shadow-lg min-w-[300px] ${className}`}>
-      <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
+    <div
+      className={`min-w-[300px] rounded-xl border border-slate-800/42 bg-gradient-to-b from-slate-900/76 to-slate-900/86 shadow-lg shadow-black/25 ${className}`}
+    >
+      <div className="flex items-center justify-between border-b border-slate-700/22 bg-slate-900/14 px-4 py-3">
         <div className="text-sm font-semibold text-slate-100">{title}</div>
         <div className="text-[11px] text-slate-500">拖拽节点 · 拉线连接</div>
       </div>
@@ -279,7 +281,7 @@ function OtUploadNode({ data }: NodeProps<OutputNodeData>) {
               }}
               className="hidden"
             />
-            <div className="rounded-lg border border-slate-700 bg-slate-950/30 px-2 py-2 text-xs text-slate-200 hover:border-slate-600 cursor-pointer transition">
+            <div className="rounded-lg border border-slate-700/55 bg-slate-950/34 px-2 py-2 text-xs text-slate-200 hover:border-slate-600/60 hover:bg-slate-950/42 cursor-pointer transition">
               {ctx.character ? `已选：${ctx.character.name}` : '点击上传角色图'}
             </div>
           </label>
@@ -287,7 +289,7 @@ function OtUploadNode({ data }: NodeProps<OutputNodeData>) {
             <button
               type="button"
               onClick={() => void ctx.autoFace()}
-              className="rounded-lg border border-slate-700 px-2 py-1.5 text-[11px] text-slate-200 hover:border-slate-600 transition"
+              className="rounded-lg border border-slate-700/55 bg-slate-950/22 px-2 py-1.5 text-[11px] text-slate-200 hover:border-slate-600/60 hover:bg-slate-950/32 transition"
             >
               智能识别脸部
             </button>
@@ -308,7 +310,7 @@ function OtUploadNode({ data }: NodeProps<OutputNodeData>) {
               }}
               className="hidden"
             />
-            <div className="rounded-lg border border-slate-700 bg-slate-950/30 px-2 py-2 text-xs text-slate-200 hover:border-slate-600 cursor-pointer transition">
+            <div className="rounded-lg border border-slate-700/55 bg-slate-950/34 px-2 py-2 text-xs text-slate-200 hover:border-slate-600/60 hover:bg-slate-950/42 cursor-pointer transition">
               {ctx.logo ? `已选：${ctx.logo.name}` : '点击上传 Logo'}
             </div>
           </label>
@@ -327,7 +329,7 @@ function OtUploadNode({ data }: NodeProps<OutputNodeData>) {
               }}
               className="hidden"
             />
-            <div className="rounded-lg border border-slate-700 bg-slate-950/30 px-2 py-2 text-xs text-slate-200 hover:border-slate-600 cursor-pointer transition">
+            <div className="rounded-lg border border-slate-700/55 bg-slate-950/34 px-2 py-2 text-xs text-slate-200 hover:border-slate-600/60 hover:bg-slate-950/42 cursor-pointer transition">
               {ctx.layer7 ? `当前：${ctx.layer7.name}` : '上传 #7'}
             </div>
           </label>
@@ -355,7 +357,7 @@ function OtTemplateBlueNode({ data }: NodeProps<OutputNodeData>) {
       >
         恢复默认模版参数
       </button>
-      <div className="rounded-lg border border-slate-800 bg-slate-950/30 p-2 text-[10px] text-slate-500 leading-relaxed">
+      <div className="rounded-lg border border-slate-800/38 bg-slate-950/32 p-2 text-[10px] text-slate-500 leading-relaxed">
         背景渐变：上 <span className="text-slate-300">{t.top}</span> · 中 <span className="text-slate-300">{t.mid}</span> · 下{' '}
         <span className="text-slate-300">{t.bottom}</span>
         <span className="text-slate-600">（haze {t.haze}）</span>
@@ -367,20 +369,20 @@ function OtTemplateBlueNode({ data }: NodeProps<OutputNodeData>) {
             value={ctx.layer7TintBlue}
             onChange={e => ctx.setLayer7TintBlue(e.target.value)}
             type="color"
-            className="w-12 h-8 rounded-lg bg-slate-950 border border-slate-800"
+            className="w-12 h-8 rounded-lg bg-slate-950/85 border border-slate-700/50"
           />
           <input
             value={ctx.layer7TintBlue}
             onChange={e => ctx.setLayer7TintBlue(e.target.value)}
-            className="flex-1 rounded-lg bg-slate-900 border border-slate-700 px-2 py-1.5 text-[11px] text-slate-200"
+            className="flex-1 rounded-lg bg-slate-900/72 border border-slate-700/50 px-2 py-1.5 text-[11px] text-slate-200"
             placeholder="#RRGGBB"
           />
         </div>
-        <div className="mt-1 text-[10px] text-slate-600">#FFFFFF 不着色</div>
+        <div className="mt-1 text-[10px] text-slate-500">#FFFFFF 不着色</div>
       </div>
       <div className="mt-3 text-[11px] font-medium text-slate-400">Logo 外发光</div>
       <div className="mt-2 grid grid-cols-2 gap-2 items-center">
-        <label className="inline-flex items-center gap-2 text-[11px] text-slate-300 select-none">
+        <label className="inline-flex items-center gap-2 text-[11px] text-slate-400 select-none">
           <input type="checkbox" checked={ctx.glowEnabled} onChange={e => ctx.setGlowEnabled(e.target.checked)} className="accent-indigo-500" />
           启用
         </label>
@@ -422,7 +424,7 @@ function OtTemplateBlueNode({ data }: NodeProps<OutputNodeData>) {
           <input
             value={ctx.logoW}
             onChange={e => ctx.setLogoW(clamp(Number(e.target.value) || 0, 20, 180))}
-            className="w-full rounded-lg bg-slate-900 border border-slate-700 px-2 py-1.5 text-[11px] text-slate-200"
+            className="w-full rounded-lg bg-slate-900/72 border border-slate-700/50 px-2 py-1.5 text-[11px] text-slate-200"
           />
         </div>
         <div>
@@ -430,7 +432,7 @@ function OtTemplateBlueNode({ data }: NodeProps<OutputNodeData>) {
           <input
             value={ctx.logoH}
             onChange={e => ctx.setLogoH(clamp(Number(e.target.value) || 0, 10, 120))}
-            className="w-full rounded-lg bg-slate-900 border border-slate-700 px-2 py-1.5 text-[11px] text-slate-200"
+            className="w-full rounded-lg bg-slate-900/72 border border-slate-700/50 px-2 py-1.5 text-[11px] text-slate-200"
           />
         </div>
       </div>
@@ -470,16 +472,16 @@ function OtTemplatePurpleNode({ data }: NodeProps<OutputNodeData>) {
             value={ctx.layer7TintPurple}
             onChange={e => ctx.setLayer7TintPurple(e.target.value)}
             type="color"
-            className="w-12 h-8 rounded-lg bg-slate-950 border border-slate-800"
+            className="w-12 h-8 rounded-lg bg-slate-950/85 border border-slate-700/50"
           />
           <input
             value={ctx.layer7TintPurple}
             onChange={e => ctx.setLayer7TintPurple(e.target.value)}
-            className="flex-1 rounded-lg bg-slate-900 border border-slate-700 px-2 py-1.5 text-[11px] text-slate-200"
+            className="flex-1 rounded-lg bg-slate-900/72 border border-slate-700/50 px-2 py-1.5 text-[11px] text-slate-200"
             placeholder="#RRGGBB"
           />
         </div>
-        <div className="mt-1 text-[10px] text-slate-600">#FFFFFF 不着色</div>
+        <div className="mt-1 text-[10px] text-slate-500">#FFFFFF 不着色</div>
       </div>
     </OtShell>
   )
@@ -492,7 +494,7 @@ function OtStackNode({ data }: NodeProps<OutputNodeData>) {
     <OtShell title={data.title} className="min-w-[240px] max-w-[260px]">
       <Handle type="target" position={Position.Left} className={bar} />
       <Handle type="source" position={Position.Right} className={bar} />
-      <div className="rounded-lg border border-dashed border-slate-600 bg-slate-950/20 p-3 text-center">
+      <div className="rounded-lg border border-dashed border-slate-600/40 bg-slate-950/28 p-3 text-center">
         <div className="text-xs text-slate-300 leading-relaxed">合成顺序（固定）</div>
         <div className="mt-2 text-[11px] text-slate-500 leading-6">
           背景渐变
@@ -518,7 +520,7 @@ function OtOutputNode({ data }: NodeProps<OutputNodeData>) {
       <Handle id="in-merge" type="target" position={Position.Left} className="!bg-indigo-500" style={{ top: '45%' }} />
       <div className="flex flex-col items-stretch gap-3">
         {/* React Flow 默认类名：nowheel / nodrag / nopan — 避免滚轮缩放画布、左键拖节点或拖动画布，仅由下方逻辑控制角色 */}
-        <div className="rounded-xl border border-sky-900/50 bg-slate-950/40 p-2 nowheel nodrag nopan">
+        <div className="nowheel nodrag nopan rounded-xl border border-slate-700/28 bg-gradient-to-b from-slate-900/42 via-slate-900/45 to-slate-900/52 p-2 shadow-[inset_0_1px_0_0_rgba(56,189,248,0.08)]">
           <div className="flex items-center gap-2 mb-1">
             <span className="text-[10px] text-sky-400/90 shrink-0">蓝线</span>
             <input
@@ -526,7 +528,7 @@ function OtOutputNode({ data }: NodeProps<OutputNodeData>) {
               value={ctx.blueFileName}
               onChange={e => ctx.setBlueFileName(e.target.value)}
               placeholder="文件名"
-              className="flex-1 min-w-0 bg-slate-800 border border-slate-700 rounded px-2 py-0.5 text-[10px] text-slate-200 placeholder:text-slate-600 focus:border-sky-500 focus:outline-none"
+              className="flex-1 min-w-0 bg-slate-900/78 border border-slate-700/45 rounded px-2 py-0.5 text-[10px] text-slate-200 placeholder:text-slate-600 focus:border-sky-500 focus:outline-none"
             />
             <button
               type="button"
@@ -548,7 +550,7 @@ function OtOutputNode({ data }: NodeProps<OutputNodeData>) {
             className="block w-[380px] h-[380px] rounded-lg cursor-grab active:cursor-grabbing touch-none overscroll-contain"
           />
         </div>
-        <div className="rounded-xl border border-violet-900/50 bg-slate-950/40 p-2 nowheel nodrag nopan">
+        <div className="nowheel nodrag nopan rounded-xl border border-slate-700/28 bg-gradient-to-b from-slate-900/42 via-slate-900/45 to-slate-900/52 p-2 shadow-[inset_0_1px_0_0_rgba(167,139,250,0.08)]">
           <div className="flex items-center gap-2 mb-1">
             <span className="text-[10px] text-violet-300/90 shrink-0">紫线</span>
             <input
@@ -556,7 +558,7 @@ function OtOutputNode({ data }: NodeProps<OutputNodeData>) {
               value={ctx.purpleFileName}
               onChange={e => ctx.setPurpleFileName(e.target.value)}
               placeholder="文件名"
-              className="flex-1 min-w-0 bg-slate-800 border border-slate-700 rounded px-2 py-0.5 text-[10px] text-slate-200 placeholder:text-slate-600 focus:border-violet-500 focus:outline-none"
+              className="flex-1 min-w-0 bg-slate-900/78 border border-slate-700/45 rounded px-2 py-0.5 text-[10px] text-slate-200 placeholder:text-slate-600 focus:border-violet-500 focus:outline-none"
             />
             <button
               type="button"
@@ -1520,7 +1522,7 @@ export default function OutputTool() {
 
   return (
     <div className="flex h-full w-full min-h-0 flex-col">
-      {/* 左侧 Tab 切换 */}
+      {/* 左侧信息区：保持清晰对比；底栏收口 */}
       <div className="absolute left-0 top-0 bottom-0 w-[156px] z-10 flex flex-col border-r border-slate-800/60 bg-slate-950/55 backdrop-blur-md">
         <div className="pt-4 pb-3">
           <div className="flex items-center justify-between gap-2">
@@ -1529,7 +1531,7 @@ export default function OutputTool() {
                 ref={tplChannelBtnRef}
                 type="button"
                 onClick={() => setTplChannelOpen(v => !v)}
-                className="w-full rounded-xl border border-indigo-500/20 bg-slate-950/55 px-3 py-2 pr-8 text-left text-[12px] font-medium text-slate-100 shadow-[0_12px_40px_rgba(0,0,0,0.35)] outline-none transition hover:border-slate-700/70 focus:border-indigo-400/60 focus:ring-2 focus:ring-indigo-500/15"
+                className="w-full rounded-xl border border-indigo-500/20 bg-slate-950/55 px-3 py-2 pr-8 text-left text-[12px] font-medium text-slate-100 shadow-[0_12px_40px_rgba(0,0,0,0.35)] outline-none transition hover:border-slate-700/70 hover:bg-slate-950/40 focus:border-indigo-400/60 focus:ring-2 focus:ring-indigo-500/15"
                 title="切换模板来源"
               >
                 {templateChannel === 'wz-domestic' ? '王者国内' : '王者营地'}
@@ -1693,6 +1695,9 @@ export default function OutputTool() {
 
           {/* 王者国内-商城模板：右侧画布区会显示“模板搭建中” */}
         </div>
+        <div className="shrink-0 border-t border-slate-800/60 bg-slate-950/72 backdrop-blur-md px-2.5 py-2">
+          <p className="text-center text-[10px] leading-snug text-slate-500">右键画布 · 平均视图</p>
+        </div>
       </div>
 
       {/* 右侧画布区域 */}
@@ -1712,6 +1717,7 @@ export default function OutputTool() {
         ) : (
           <>
             <ReactFlow
+              className="!bg-transparent [&_.react-flow__pane]:!bg-transparent"
               nodes={nodes}
               edges={edges}
               onNodesChange={onNodesChange}

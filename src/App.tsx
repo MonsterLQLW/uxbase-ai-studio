@@ -1,5 +1,6 @@
 import { useState, useEffect, lazy, Suspense, Component, type ReactNode } from 'react'
-import Layout from './components/Layout'
+import Layout, { type Tab } from './components/Layout'
+import HomePage from './components/HomePage'
 import AuroraBg from './components/AuroraBg'
 import ChatPanel from './components/ChatPanel'
 import { setGeminiKey as setGeminiKeyService, setTIMIKey, setTIMIUrl, setTIMIModel, testGeminiConnection, testTIMIConnection } from './services/gemini'
@@ -39,8 +40,6 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boole
 const LazyAvatarFrameDesigner = lazy(() => import('./components/AvatarFrameDesigner'))
 const LazyAIMatting = lazy(() => import('./components/AIMatting'))
 const LazyOutputTool = lazy(() => import('./components/OutputTool'))
-
-type Tab = 'chat' | 'avatar-frame' | 'ai-matting' | 'output-tool' | 'settings'
 
 type ShapeKind = 'circle' | 'square'
 type Quadrant = 'lt' | 'lb' | 'rt' | 'rb'
@@ -333,7 +332,7 @@ export default function App() {
     if (!APP_PASSWORD) return true
     return localStorage.getItem('appUnlocked') === 'true'
   })
-  const [activeTab, setActiveTab] = useState<Tab>('chat')
+  const [activeTab, setActiveTab] = useState<Tab>('home')
   const [geminiKey, setGeminiKey] = useState(() => localStorage.getItem('geminiApiKey') || '')
   const [timiKey, setTimiKey] = useState(() => localStorage.getItem('timiApiKey') || '')
   const [timiUrl, setTimiUrl] = useState(() => localStorage.getItem('timiApiUrl') || '')
@@ -524,7 +523,7 @@ export default function App() {
         <div className="relative z-10 w-full max-w-sm mx-auto p-8 bg-slate-800 rounded-2xl shadow-2xl border border-slate-700">
           <div className="text-center mb-8">
             <div className="text-4xl mb-3">🔐</div>
-            <h1 className="text-xl font-bold text-white mb-1">uxbase AI Studio</h1>
+            <h1 className="font-brand text-2xl font-semibold tracking-tight text-white mb-1">UXbase AI Studio</h1>
             <p className="text-sm text-slate-400">请输入访问密码</p>
           </div>
           <div className="space-y-4">
@@ -556,6 +555,7 @@ export default function App() {
     <>
       <AuroraBg />
       <Layout activeTab={activeTab} onTabChange={setActiveTab}>
+        {activeTab === 'home' && <HomePage onNavigate={setActiveTab} />}
         {activeTab === 'chat' && <ChatPanel />}
         {activeTab === 'avatar-frame' && (
           <div className="w-full h-full relative">

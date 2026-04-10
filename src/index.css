@@ -1,32 +1,37 @@
 @import "tailwindcss";
 
 @theme {
-  --animate-aurora-1: aurora-1 6s ease-in-out infinite;
-  --animate-aurora-2: aurora-2 8s ease-in-out infinite;
-  --animate-aurora-3: aurora-3 10s ease-in-out infinite;
+  /* 大色块：周期与幅度取「最初版」与「极慢版」之间，略好辨认 */
+  --animate-aurora-1: aurora-1 10s ease-in-out infinite;
+  --animate-aurora-2: aurora-2 12s ease-in-out infinite;
+  --animate-aurora-3: aurora-3 15s ease-in-out infinite;
 }
 
 @keyframes aurora-1 {
-  0%, 100% { transform: translate(0, 0) scale(0.8) rotate(0deg); }
-  33%       { transform: translate(80%, 50%) scale(1.5) rotate(45deg); }
-  66%       { transform: translate(-20%, 80%) scale(0.6) rotate(-45deg); }
+  0%, 100% { transform: translate(0, 0) scale(0.9) rotate(0deg); }
+  33%       { transform: translate(42%, 28%) scale(1.22) rotate(20deg); }
+  66%       { transform: translate(-18%, 32%) scale(0.82) rotate(-16deg); }
 }
 @keyframes aurora-2 {
   0%, 100% { transform: translate(0, 0) scale(1) rotate(0deg); }
-  33%       { transform: translate(-80%, 60%) scale(0.7) rotate(-30deg); }
-  66%       { transform: translate(50%, -60%) scale(1.4) rotate(30deg); }
+  33%       { transform: translate(-36%, 28%) scale(0.88) rotate(-14deg); }
+  66%       { transform: translate(28%, -28%) scale(1.2) rotate(14deg); }
 }
 @keyframes aurora-3 {
-  0%, 100% { transform: translate(0, 0) scale(1.2) rotate(0deg); }
-  33%       { transform: translate(60%, -80%) scale(0.6) rotate(60deg); }
-  66%       { transform: translate(-60%, 40%) scale(1.5) rotate(-60deg); }
+  0%, 100% { transform: translate(0, 0) scale(1.06) rotate(0deg); }
+  33%       { transform: translate(30%, -36%) scale(0.84) rotate(18deg); }
+  66%       { transform: translate(-28%, 22%) scale(1.14) rotate(-18deg); }
 }
 
 body {
-  background-color: #0f172a;
+  background-color: #050510;
   color: #e2e8f0;
   margin: 0;
   overflow: hidden;
+}
+
+.font-brand {
+  font-family: 'Quicksand', system-ui, sans-serif;
 }
 
 ::-webkit-scrollbar { width: 6px; height: 6px; }

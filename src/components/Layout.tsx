@@ -1,6 +1,6 @@
-import { MessageSquare, Settings, Frame, Scissors, Package } from 'lucide-react'
+import { MessageSquare, Settings, Frame, Scissors, Package, Home } from 'lucide-react'
 
-type Tab = 'chat' | 'avatar-frame' | 'ai-matting' | 'output-tool' | 'settings'
+export type Tab = 'home' | 'chat' | 'avatar-frame' | 'ai-matting' | 'output-tool' | 'settings'
 
 interface NavItemProps {
   icon: React.ReactNode
@@ -12,15 +12,16 @@ interface NavItemProps {
 function NavItem({ icon, label, active, onClick }: NavItemProps) {
   return (
     <button
+      type="button"
       onClick={onClick}
-      className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
+      className={`flex items-center gap-1 rounded-full px-2 py-1.5 text-[11px] font-medium transition sm:text-xs ${
         active
-          ? 'bg-blue-600 text-white'
-          : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+          ? 'bg-white/15 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]'
+          : 'text-slate-400 hover:bg-white/[0.07] hover:text-slate-200'
       }`}
     >
       {icon}
-      <span>{label}</span>
+      <span className="hidden sm:inline">{label}</span>
     </button>
   )
 }
@@ -37,59 +38,80 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
     activeTab === 'ai-matting' ||
     activeTab === 'output-tool'
   const isChatTab = activeTab === 'chat'
+  const isHomeTab = activeTab === 'home'
+
   return (
-    <div className="flex flex-col h-screen bg-slate-950 text-slate-200">
-      {/* 顶部导航 */}
-      <header className="bg-slate-900 border-b border-slate-800 px-6 py-4">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <h1 className="text-xl font-bold text-blue-400">UXbase AI Studio</h1>
-          <nav className="flex space-x-6">
+    <div className="relative z-10 flex h-screen flex-col bg-transparent text-slate-200">
+      <header className="shrink-0 px-3 pb-1.5 pt-3 sm:px-5">
+        <div className="mx-auto flex max-w-6xl flex-col gap-2 rounded-full border border-white/[0.08] bg-slate-950/35 px-2.5 py-1.5 shadow-[0_6px_28px_rgba(0,0,0,0.4)] backdrop-blur-xl sm:flex-row sm:items-center sm:justify-between sm:px-3.5 sm:py-2">
+          <button
+            type="button"
+            onClick={() => onTabChange('home')}
+            className="font-brand shrink-0 text-left text-lg font-semibold leading-tight tracking-tight text-white sm:text-xl"
+            title="首页"
+          >
+            <span className="bg-gradient-to-r from-violet-200 via-white to-cyan-200 bg-clip-text text-transparent drop-shadow-[0_0_20px_rgba(139,92,246,0.3)]">
+              UXbase AI Studio
+            </span>
+          </button>
+
+          <nav className="flex flex-1 flex-wrap items-center justify-center gap-0.5 sm:justify-end sm:gap-1">
             <NavItem
-              icon={<MessageSquare size={18} />}
+              icon={<Home size={14} />}
+              label="首页"
+              active={activeTab === 'home'}
+              onClick={() => onTabChange('home')}
+            />
+            <NavItem
+              icon={<MessageSquare size={14} />}
               label="AI Chat"
               active={activeTab === 'chat'}
               onClick={() => onTabChange('chat')}
             />
             <NavItem
-              icon={<Frame size={18} />}
+              icon={<Frame size={14} />}
               label="AI创作"
               active={activeTab === 'avatar-frame'}
               onClick={() => onTabChange('avatar-frame')}
             />
             <NavItem
-              icon={<Scissors size={18} />}
+              icon={<Scissors size={14} />}
               label="智能抠图"
               active={activeTab === 'ai-matting'}
               onClick={() => onTabChange('ai-matting')}
             />
             <NavItem
-              icon={<Package size={18} />}
+              icon={<Package size={14} />}
               label="输出工具"
               active={activeTab === 'output-tool'}
               onClick={() => onTabChange('output-tool')}
             />
             <NavItem
-              icon={<Settings size={18} />}
+              icon={<Settings size={14} />}
               label="Settings"
               active={activeTab === 'settings'}
               onClick={() => onTabChange('settings')}
             />
           </nav>
-          <div className="text-xs text-slate-500">
-            Gemini 2.0 Flash · Free Tier
+
+          <div className="hidden text-[9px] text-slate-500 lg:block lg:shrink-0 lg:pl-1">
+            Gemini · TIMI
           </div>
         </div>
       </header>
 
-      {/* 主内容 */}
-      <main className="flex-1 min-h-0 overflow-hidden">
+      <main
+        className={`relative min-h-0 flex-1 overflow-hidden ${isHomeTab ? '' : 'bg-slate-950/[0.86] backdrop-blur-md'}`}
+      >
         <div
           className={
             isCanvasTab
-              ? 'w-full h-full min-h-0'
+              ? 'h-full min-h-0 w-full bg-slate-950'
               : isChatTab
-                ? 'max-w-7xl mx-auto h-full min-h-0 px-6 pt-8 pb-10'
-                : 'max-w-7xl mx-auto h-full min-h-0 px-6 py-8'
+                ? 'mx-auto h-full min-h-0 max-w-7xl px-6 pb-10 pt-8'
+                : isHomeTab
+                  ? 'mx-auto flex h-full min-h-0 w-full max-w-6xl flex-col px-5 pb-10 pt-6 sm:px-8 sm:pb-12 sm:pt-8'
+                  : 'mx-auto h-full min-h-0 max-w-7xl px-6 py-8'
           }
         >
           {children}

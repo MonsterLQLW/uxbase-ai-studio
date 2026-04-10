@@ -14,7 +14,7 @@ function NavItem({ icon, label, active, onClick }: NavItemProps) {
     <button
       type="button"
       onClick={onClick}
-      className={`flex items-center gap-1 rounded-full px-2 py-1.5 text-[11px] font-medium transition sm:text-xs ${
+      className={`flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[11px] font-medium transition sm:gap-2 sm:px-3 sm:text-xs ${
         active
           ? 'bg-white/15 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]'
           : 'text-slate-400 hover:bg-white/[0.07] hover:text-slate-200'
@@ -43,7 +43,7 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
   return (
     <div className="relative z-10 flex h-screen flex-col bg-transparent text-slate-200">
       <header className="shrink-0 px-3 pb-1.5 pt-3 sm:px-5">
-        <div className="mx-auto flex max-w-6xl flex-col gap-2 rounded-full border border-white/[0.08] bg-slate-950/35 px-2.5 py-1.5 shadow-[0_6px_28px_rgba(0,0,0,0.4)] backdrop-blur-xl sm:flex-row sm:items-center sm:justify-between sm:px-3.5 sm:py-2">
+        <div className="mx-auto flex max-w-6xl flex-col gap-2 rounded-full border border-white/[0.08] bg-slate-950/35 px-2.5 py-1.5 shadow-[0_6px_28px_rgba(0,0,0,0.4)] backdrop-blur-xl sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:px-4 sm:py-2">
           <button
             type="button"
             onClick={() => onTabChange('home')}
@@ -55,7 +55,7 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
             </span>
           </button>
 
-          <nav className="flex flex-1 flex-wrap items-center justify-center gap-0.5 sm:justify-end sm:gap-1">
+          <nav className="flex flex-1 flex-wrap items-center justify-center gap-1.5 sm:justify-end sm:gap-2 md:gap-2.5">
             <NavItem
               icon={<Home size={14} />}
               label="首页"
@@ -94,7 +94,7 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
             />
           </nav>
 
-          <div className="hidden text-[9px] text-slate-500 lg:block lg:shrink-0 lg:pl-1">
+          <div className="hidden whitespace-nowrap text-[9px] tracking-wide text-slate-500 lg:ml-1 lg:block lg:shrink-0 lg:pl-4">
             Gemini · TIMI
           </div>
         </div>

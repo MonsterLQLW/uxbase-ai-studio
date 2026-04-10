@@ -77,15 +77,14 @@ async function checkIntranetAccess(): Promise<void> {
       signal: controller.signal,
     })
     if (!resp.ok) {
-      // 404 等 HTTP 错误 = /timi-proxy 不存在（Vercel 生产环境）
-      throw new Error(`TIMI 代理不可用（HTTP ${resp.status}），请确保在内部网络环境下使用`)
+      // Vercel 返回 404 = /timi-proxy 不存在，说明不在本地 dev 环境
+      throw new Error('TIMI 代理不可用，请在内部网络环境 + npm run dev 下使用')
     }
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err)
     if (err instanceof Error && err.name === 'AbortError') {
       throw new Error('TIMI 连接超时（3秒），请确保在内部网络环境下使用')
     }
-    throw err // 已经包装成 Error 的情况直接抛
+    throw new Error('TIMI 代理不可用，请在内部网络环境 + npm run dev 下使用')
   } finally {
     clearTimeout(timer)
   }

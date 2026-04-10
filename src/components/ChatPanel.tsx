@@ -81,7 +81,7 @@ export default function ChatPanel() {
                 AI Chat
               </h2>
               <p className="mt-3 max-w-md text-sm leading-relaxed text-slate-400 sm:text-[15px]">
-                可对话智能助手·分析丰富&数据·智能生成
+                可对话智能助手 · 分析风格&数据 · 智能生成
               </p>
             </div>
           ) : (

@@ -29,7 +29,7 @@ export default function HomePage({ onNavigate }: { onNavigate: HomeNavigate }) {
             </span>
             <span className="text-[15px] text-slate-300 sm:text-base">
               <span className="font-semibold tracking-wide text-sky-200/95">UX</span>
-              资源设计
+              设计&输出
             </span>
             <span className="select-none text-slate-600 sm:text-slate-500" aria-hidden>
               ·

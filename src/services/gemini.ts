@@ -476,6 +476,10 @@ export async function testTIMIConnection(): Promise<{ ok: boolean; message: stri
     return { ok: false, message: 'TIMI 返回了响应但格式异常' }
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error)
+    // 网络类错误更明确地提示内网环境
+    if (msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('Network request failed')) {
+      return { ok: false, message: '无法连接到 TIMI，请确保在内部网络环境下使用' }
+    }
     return { ok: false, message: `TIMI 连接失败: ${msg}` }
   }
 }
@@ -485,9 +489,9 @@ export async function testTIMIConnection(): Promise<{ ok: boolean; message: stri
  */
 export async function chatWithTIMI(messages: ChatMessage[]): Promise<string> {
   if (!TIMI_API_KEY) throw new Error('TIMI API Key 未配置，请到设置页填写')
-  if (!TIMI_API_URL) throw new Error('TIMI API URL 未配置')
+  if (!TIMI_API_URL) throw new Error('TIMI API URL 未配置，请在设置页填写')
   const auth = getTIMIAuthHeaderValue()
-  if (!auth) throw new Error('TIMI API Key 未配置，请到设置页填写')
+  if (!auth) throw new Error('TIMI API Key 未配置，请在设置页填写')
 
   const formatted = messages.map(m => {
     const role = m.role === 'model' ? 'assistant' : m.role
@@ -541,7 +545,7 @@ export async function chatWithTIMI(messages: ChatMessage[]): Promise<string> {
 export async function generateSimilarReferenceAnalysisWithTIMI(options: { prompt: string; imageDataUrls: string[] }): Promise<string> {
   const { prompt, imageDataUrls } = options
   if (!TIMI_API_KEY) throw new Error('TIMI API Key 未配置，请到设置页填写')
-  if (!TIMI_API_URL) throw new Error('TIMI API URL 未配置')
+  if (!TIMI_API_URL) throw new Error('TIMI API URL 未配置，请在设置页填写')
   const auth = getTIMIAuthHeaderValue()
   if (!auth) throw new Error('TIMI API Key 未配置，请到设置页填写')
 
@@ -640,9 +644,9 @@ export async function generateImageWithTIMI({
   imageSize = '1K',
 }: TIMIImageGenerateOptions): Promise<string[]> {
   if (!TIMI_API_KEY) throw new Error('TIMI API Key 未配置，请到设置页填写')
-  if (!TIMI_API_URL) throw new Error('TIMI API URL 未配置')
+  if (!TIMI_API_URL) throw new Error('TIMI API URL 未配置，请在设置页填写')
   const auth = getTIMIAuthHeaderValue()
-  if (!auth) throw new Error('TIMI API Key 未配置，请到设置页填写')
+  if (!auth) throw new Error('TIMI API Key 未配置，请在设置页填写')
 
   const modelInfo = TIMI_IMAGE_MODEL_MAP[timiModel]
   if (!modelInfo) throw new Error(`未知的 TIMI 图像模型: ${timiModel}`)

@@ -286,9 +286,9 @@ function SettingsPanel({
                     {timiResult === 'testing' ? '测试中...' : '测试 TIMI 连接'}
                   </button>
                   {timiResult === 'success' && <p className="text-xs text-green-400">✅ {timiTestDetail || 'TIMI 已连接'}</p>}
-                  {timiResult === 'error' && <p className="text-xs text-red-400">❌ {timiTestDetail || 'TIMI 连接失败，请检查 API Key'}</p>}
+                  {timiResult === 'error' && <p className="text-xs text-red-400">❌ {timiTestDetail || 'TIMI 连接失败'}<br />💡 请确保：① 在内网环境下 ② 已填写 API Key ③ API 地址正确</p>}
                 </div>
-                <p className="text-xs text-slate-500 mt-2">TIMI AI 内部模型代理服务，支持多种模型（chat/completions）</p>
+                <p className="text-xs text-slate-500 mt-2">TIMI AI 内部模型代理服务，支持多种模型（chat/completions）<br />⚠️ 需要在内部网络环境下使用，并填写自己的 API Key</p>
               </div>
             </div>
           </div>

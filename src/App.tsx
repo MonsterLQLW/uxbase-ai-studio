@@ -4,6 +4,7 @@ import AuroraBg from './components/AuroraBg'
 import ChatPanel from './components/ChatPanel'
 import { setGeminiKey as setGeminiKeyService, setTIMIKey, setTIMIUrl, setTIMIModel, testGeminiConnection, testTIMIConnection } from './services/gemini'
 import type { FlowState as AvatarFlowState } from './components/AvatarFrameDesigner'
+import { APP_PASSWORD } from './config'
 
 // 错误边界组件，捕获渲染错误
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; error: string }> {
@@ -328,6 +329,10 @@ function SettingsPanel({
 }
 
 export default function App() {
+  const [isUnlocked, setIsUnlocked] = useState(() => {
+    if (!APP_PASSWORD) return true
+    return localStorage.getItem('appUnlocked') === 'true'
+  })
   const [activeTab, setActiveTab] = useState<Tab>('chat')
   const [geminiKey, setGeminiKey] = useState(() => localStorage.getItem('geminiApiKey') || '')
   const [timiKey, setTimiKey] = useState(() => localStorage.getItem('timiApiKey') || '')
@@ -495,6 +500,57 @@ export default function App() {
   }, [avatarFrameState])
 
   // 智能抠图不做 localStorage 持久化：切换顶部 Tab 保留（内存），刷新网页自动清空往期资源
+
+  // 密码解锁
+  const [unlockInput, setUnlockInput] = useState('')
+  const [unlockError, setUnlockError] = useState('')
+
+  const handleUnlock = () => {
+    if (unlockInput === APP_PASSWORD) {
+      localStorage.setItem('appUnlocked', 'true')
+      setIsUnlocked(true)
+      setUnlockError('')
+    } else {
+      setUnlockError('密码错误，请重试')
+      setUnlockInput('')
+    }
+  }
+
+  // 未解锁时显示密码门
+  if (!isUnlocked && APP_PASSWORD) {
+    return (
+      <div className="w-full h-screen flex items-center justify-center bg-slate-900 overflow-hidden">
+        <AuroraBg />
+        <div className="relative z-10 w-full max-w-sm mx-auto p-8 bg-slate-800 rounded-2xl shadow-2xl border border-slate-700">
+          <div className="text-center mb-8">
+            <div className="text-4xl mb-3">🔐</div>
+            <h1 className="text-xl font-bold text-white mb-1">uxbase AI Studio</h1>
+            <p className="text-sm text-slate-400">请输入访问密码</p>
+          </div>
+          <div className="space-y-4">
+            <input
+              type="password"
+              value={unlockInput}
+              onChange={(e) => { setUnlockInput(e.target.value); setUnlockError('') }}
+              onKeyDown={(e) => e.key === 'Enter' && handleUnlock()}
+              placeholder="输入密码后按回车"
+              className="w-full px-4 py-3 bg-slate-900 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition text-center"
+              autoFocus
+            />
+            {unlockError && (
+              <p className="text-red-400 text-sm text-center">{unlockError}</p>
+            )}
+            <button
+              onClick={handleUnlock}
+              className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-lg transition"
+            >
+              进入
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <>

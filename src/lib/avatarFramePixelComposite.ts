@@ -83,7 +83,7 @@ export function normalizeAndValidatePlan(raw: unknown, allowedIds: Set<string>):
   const bc = o.borderColor
   return {
     placements,
-    borderWidth: clamp(Number.isFinite(bw) ? bw : 6, 0, 28),
+    borderWidth: clamp(Number.isFinite(bw) ? bw : 0, 0, 28),
     borderColor: typeof bc === 'string' && bc.trim() ? bc.trim() : '#6366f1',
   }
 }
@@ -122,7 +122,7 @@ export function defaultPixelFramePlan(
   images: Array<{ id: string }>,
   quadrants: Array<'lt' | 'lb' | 'rt' | 'rb'>,
 ): PixelFramePlan {
-  if (images.length === 0) return { placements: [], borderWidth: 6, borderColor: '#6366f1' }
+  if (images.length === 0) return { placements: [], borderWidth: 0, borderColor: '#6366f1' }
   const qs: Array<'lt' | 'lb' | 'rt' | 'rb'> =
     quadrants.length > 0 ? quadrants : ['lt', 'rt', 'lb', 'rb']
   const placements: PixelFramePlacement[] = images.map((img, idx) => {
@@ -141,7 +141,7 @@ export function defaultPixelFramePlan(
       zIndex: idx,
     }
   })
-  return { placements, borderWidth: 6, borderColor: '#6366f1' }
+  return { placements, borderWidth: 0, borderColor: '#6366f1' }
 }
 
 export async function renderAvatarFrameFromPlan(options: {

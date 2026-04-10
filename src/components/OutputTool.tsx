@@ -733,12 +733,17 @@ const OUTPUT_TOOL_TABS: OutputToolTab[] = [
 export default function OutputTool() {
   const [activeTab, setActiveTab] = useState<OutputToolTabId>('signature_gift')
   const [templateChannel, setTemplateChannel] = useState<'wz-domestic' | 'wz-camp'>('wz-domestic')
+  const [wzDomesticSection, setWzDomesticSection] = useState<'assets' | 'mall'>('assets')
+  const [wzDomesticSectionOpen, setWzDomesticSectionOpen] = useState(false)
   const [tplChannelOpen, setTplChannelOpen] = useState(false)
   const tplChannelBtnRef = useRef<HTMLButtonElement | null>(null)
+  const wzSectionBtnRef = useRef<HTMLButtonElement | null>(null)
   const [ctxMenu, setCtxMenu] = useState<null | { x: number; y: number }>(null)
 
   useEffect(() => {
     if (templateChannel === 'wz-camp') setCtxMenu(null)
+    if (templateChannel === 'wz-camp') setWzDomesticSection('assets')
+    if (templateChannel === 'wz-camp') setWzDomesticSectionOpen(false)
   }, [templateChannel])
 
   const OUT = 190
@@ -1513,6 +1518,27 @@ export default function OutputTool() {
     }
   }, [tplChannelOpen])
 
+  // close WZ domestic section dropdown on outside click / Esc
+  useEffect(() => {
+    if (!wzDomesticSectionOpen) return
+    const onDown = (e: MouseEvent) => {
+      const btn = wzSectionBtnRef.current
+      const target = e.target as globalThis.Node | null
+      if (!btn || !target) return
+      if (btn.contains(target)) return
+      setWzDomesticSectionOpen(false)
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setWzDomesticSectionOpen(false)
+    }
+    window.addEventListener('mousedown', onDown)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('mousedown', onDown)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [wzDomesticSectionOpen])
+
   const averageView = useCallback(() => {
     setCtxMenu(null)
     setNodes(prev => buildAverageOutputToolNodes(prev.map(n => ({ ...n }))))
@@ -1592,6 +1618,61 @@ export default function OutputTool() {
         </div>
         <div className="flex-1 overflow-y-auto py-2">
           {templateChannel === 'wz-domestic' &&
+            (
+              <div className="relative mx-1.5 mb-2 w-[calc(100%-12px)]">
+                <button
+                  ref={wzSectionBtnRef}
+                  type="button"
+                  onClick={() => setWzDomesticSectionOpen(v => !v)}
+                  className="w-full rounded-lg border border-slate-800/50 bg-slate-950/20 px-3 py-2 pr-8 text-left text-[11px] font-medium text-slate-300 outline-none transition hover:border-slate-700/55 hover:bg-slate-950/25 focus:border-slate-700/70 focus:ring-1 focus:ring-indigo-500/10"
+                  title="切换王者国内子集"
+                >
+                  {wzDomesticSection === 'assets' ? '个性资源' : '商城'}
+                </button>
+                <div className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-300/80">
+                  <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                    <path
+                      fillRule="evenodd"
+                      d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 10.94l3.71-3.71a.75.75 0 1 1 1.06 1.06l-4.24 4.25a.75.75 0 0 1-1.06 0L5.21 8.29a.75.75 0 0 1 .02-1.08Z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                </div>
+
+                {wzDomesticSectionOpen && (
+                  <div
+                    className="absolute left-0 right-0 mt-2 z-10 rounded-lg border border-slate-800/70 bg-slate-950/90 backdrop-blur shadow-[0_12px_36px_rgba(0,0,0,0.45)] overflow-hidden"
+                    onMouseDown={e => e.stopPropagation()}
+                  >
+                    {(
+                      [
+                        { id: 'assets' as const, label: '个性资源' },
+                        { id: 'mall' as const, label: '商城' },
+                      ] as const
+                    ).map(opt => {
+                      const active = wzDomesticSection === opt.id
+                      return (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          onClick={() => {
+                            setWzDomesticSection(opt.id)
+                            setWzDomesticSectionOpen(false)
+                          }}
+                          className={`w-full px-3 py-2 text-left text-[11px] transition ${
+                            active ? 'bg-indigo-500/12 text-indigo-200' : 'text-slate-200 hover:bg-slate-800/30'
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+          {templateChannel === 'wz-domestic' && wzDomesticSection === 'assets' &&
             OUTPUT_TOOL_TABS.map((tab, idx) => (
               <button
                 key={tab.id}
@@ -1612,6 +1693,8 @@ export default function OutputTool() {
                 </div>
               </button>
             ))}
+
+          {/* 王者国内-商城：左侧不再重复提示，右侧画布区会显示“模板搭建中” */}
         </div>
       </div>
 
@@ -1620,11 +1703,12 @@ export default function OutputTool() {
         className="flex-1 min-h-0 w-full relative ml-[156px]"
         onContextMenu={e => {
           if (templateChannel === 'wz-camp') return
+          if (templateChannel === 'wz-domestic' && wzDomesticSection === 'mall') return
           e.preventDefault()
           setCtxMenu({ x: e.clientX, y: e.clientY })
         }}
       >
-        {templateChannel === 'wz-camp' ? (
+        {templateChannel === 'wz-camp' || (templateChannel === 'wz-domestic' && wzDomesticSection === 'mall') ? (
           <div className="absolute inset-0 flex items-center justify-center bg-slate-950/40">
             <p className="text-sm text-slate-400">模板搭建中</p>
           </div>

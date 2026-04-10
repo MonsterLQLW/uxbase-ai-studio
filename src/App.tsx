@@ -356,7 +356,7 @@ export default function App() {
       timiImageSize: '1K',
       composite: {
         elements: [],
-        borderWidth: 6,
+        borderWidth: 0,
         borderColor: '#6366f1',
         glow: 0.25,
       },
@@ -494,7 +494,7 @@ export default function App() {
     }
   }, [avatarFrameState])
 
-  // AI matting 不做 localStorage 持久化：切换顶部 Tab 保留（内存），刷新网页自动清空往期资源
+  // 智能抠图不做 localStorage 持久化：切换顶部 Tab 保留（内存），刷新网页自动清空往期资源
 
   return (
     <>
@@ -515,7 +515,7 @@ export default function App() {
         )}
         {activeTab === 'ai-matting' && (
           <div className="w-full h-full relative">
-            <Suspense fallback={<div className="flex items-center justify-center h-full text-slate-400">加载 AI matting 中...</div>}>
+            <Suspense fallback={<div className="flex items-center justify-center h-full text-slate-400">加载 智能抠图 中...</div>}>
               <LazyAIMatting state={mattingState} onStateChange={setMattingState} />
             </Suspense>
           </div>

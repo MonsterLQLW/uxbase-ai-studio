@@ -51,13 +51,13 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
             />
             <NavItem
               icon={<Frame size={18} />}
-              label="头像框设计"
+              label="AI创作"
               active={activeTab === 'avatar-frame'}
               onClick={() => onTabChange('avatar-frame')}
             />
             <NavItem
               icon={<Scissors size={18} />}
-              label="AI matting"
+              label="智能抠图"
               active={activeTab === 'ai-matting'}
               onClick={() => onTabChange('ai-matting')}
             />

@@ -172,6 +172,9 @@ type GenerateOptions = {
   imageDataUrls?: string[]
   /** 默认 true：多图请求前压缩以提速 */
   compressImages?: boolean
+  /** 多图压缩最大边长（默认 768；布局推理可降到 560 提速） */
+  compressMaxEdge?: number
+  compressQuality?: number
 }
 
 export async function generateWithGemini({
@@ -179,11 +182,13 @@ export async function generateWithGemini({
   text,
   imageDataUrls,
   compressImages = true,
+  compressMaxEdge = 768,
+  compressQuality = 0.82,
 }: GenerateOptions) {
   const raw = imageDataUrls || []
   const urls =
     compressImages && raw.length > 0
-      ? await Promise.all(raw.map(u => compressDataUrlForGemini(u, 768, 0.82)))
+      ? await Promise.all(raw.map(u => compressDataUrlForGemini(u, compressMaxEdge, compressQuality)))
       : raw
 
   const parts: any[] = [{ text }]
@@ -518,9 +523,14 @@ export async function chatWithTIMI(messages: ChatMessage[]): Promise<string> {
   }
 
   const data = await resp.json()
-  const content = data?.choices?.[0]?.message?.content
-  if (!content) {
-    throw new Error('TIMI 返回了空响应')
+  const choice = data?.choices?.[0]
+  const content = choice?.message?.content
+  const finishReason = choice?.finish_reason
+  const errMsg = data?.error?.message || data?.message
+  if (typeof content !== 'string' || content.trim() === '') {
+    if (errMsg) throw new Error(`TIMI 响应异常：${String(errMsg).slice(0, 300)}`)
+    if (finishReason) throw new Error(`TIMI 未返回有效文本（finish_reason=${String(finishReason)}）`)
+    throw new Error('TIMI 未返回有效文本（content 为空）')
   }
   return content
 }
@@ -561,8 +571,15 @@ export async function generateSimilarReferenceAnalysisWithTIMI(options: { prompt
   }
 
   const data = (await resp.json()) as any
-  const out = data?.choices?.[0]?.message?.content
-  if (!out) throw new Error('TIMI 返回了空响应')
+  const choice = data?.choices?.[0]
+  const out = choice?.message?.content
+  const finishReason = choice?.finish_reason
+  const errMsg = data?.error?.message || data?.message
+  if (typeof out !== 'string' || out.trim() === '') {
+    if (errMsg) throw new Error(`TIMI 分析响应异常：${String(errMsg).slice(0, 300)}`)
+    if (finishReason) throw new Error(`TIMI 分析未返回有效文本（finish_reason=${String(finishReason)}）`)
+    throw new Error('TIMI 分析未返回有效文本（content 为空）')
+  }
   return out
 }
 
@@ -630,15 +647,25 @@ export async function generateImageWithTIMI({
   const modelInfo = TIMI_IMAGE_MODEL_MAP[timiModel]
   if (!modelInfo) throw new Error(`未知的 TIMI 图像模型: ${timiModel}`)
 
-  // 构建 messages：user content 支持多图 + 文本
+  const refMaxEdge = imageSize === '2K' ? 576 : 448
+  const refQuality = imageSize === '2K' ? 0.82 : 0.72
+
+  // 构建 messages：user content 支持多图 + 文本（显式声明出图档位，避免网关忽略 image_config）
   const userContent: Array<Record<string, unknown>> = [
-    { type: 'text', text: prompt },
+    {
+      type: 'text',
+      text: [
+        `IMAGE_OUTPUT_SIZE=${imageSize} (must honor; 1K=faster standard detail, 2K=sharper finer detail).`,
+        '',
+        prompt,
+      ].join('\n'),
+    },
   ]
 
-  // 参考图在浏览器侧先压缩，显著减少 TIMI 请求体积与超时概率
+  // 参考图在浏览器侧先压缩，显著减少 TIMI 请求体积与超时概率（1K 更激进以提速）
   const refs =
     referenceImages && referenceImages.length > 0
-      ? await Promise.all(referenceImages.map(u => compressDataUrlForGemini(u, 512, 0.78)))
+      ? await Promise.all(referenceImages.map(u => compressDataUrlForGemini(u, refMaxEdge, refQuality)))
       : []
 
   if (refs.length > 0) {
@@ -658,16 +685,16 @@ export async function generateImageWithTIMI({
   }
 
   if (modelInfo.stable) {
-    // 稳定版：generation_config.imageConfig
+    // 稳定版：generation_config.image_config（注意：不要同时传 snake_case + camelCase，否则会触发 oneof 冲突）
     body.generation_config = {
-      imageConfig: {
-        aspectRatio,
-        imageSize,
-        imageOutputOptions: { mimeType: 'image/png' },
+      image_config: {
+        aspect_ratio: aspectRatio,
+        image_size: imageSize,
+        image_output_options: { mime_type: 'image/png' },
       },
     }
   } else {
-    // 标准版：image_config
+    // 标准版：image_config（只传 snake_case，避免 image_size 与 imageSize 同时出现导致 oneof 冲突）
     body.image_config = {
       aspect_ratio: aspectRatio,
       image_size: imageSize,
@@ -711,9 +738,21 @@ export async function generateImageWithTIMI({
     }
 
     const data = (await resp.json()) as any
-    const message = data?.choices?.[0]?.message
+    const choice = data?.choices?.[0]
+    const message = choice?.message
+    const finishReason = choice?.finish_reason
+    const errMsg = data?.error?.message || data?.message
     if (!message) {
-      throw new Error('TIMI 返回了空的响应')
+      // 某些网关会返回 200 但 body 不含 choices/message（偶发），视为可重试
+      lastStatus = 200
+      lastText = errMsg ? String(errMsg) : JSON.stringify(data || {}).slice(0, 300)
+      if (attempt < maxAttempts) {
+        await sleep(baseDelayMs * attempt)
+        continue
+      }
+      if (errMsg) throw new Error(`TIMI 响应异常：${String(errMsg).slice(0, 300)}`)
+      if (finishReason) throw new Error(`TIMI 未返回图片（finish_reason=${String(finishReason)}）`)
+      throw new Error('TIMI 返回的结构不完整（缺少 choices[0].message）')
     }
 
     // 从 choices[0].message.images 提取图片
@@ -728,6 +767,15 @@ export async function generateImageWithTIMI({
     }
 
     if (images.length === 0) {
+      // message 存在但 images 为空也可能是偶发/网关降级，优先重试
+      lastStatus = 200
+      lastText = errMsg ? String(errMsg) : JSON.stringify(message || {}).slice(0, 300)
+      if (attempt < maxAttempts) {
+        await sleep(baseDelayMs * attempt)
+        continue
+      }
+      if (errMsg) throw new Error(`TIMI 未返回图片：${String(errMsg).slice(0, 300)}`)
+      if (finishReason) throw new Error(`TIMI 未返回图片（finish_reason=${String(finishReason)}）`)
       throw new Error('TIMI 返回了空的图片结果')
     }
 
@@ -742,6 +790,19 @@ export async function generateImageWithTIMI({
  */
 export function isTIMIImageModel(model: string): model is TIMIImageModel {
   return model in TIMI_IMAGE_MODEL_MAP
+}
+
+/** 圆形/方形 = 构图趋势，不要画成明显的几何描边洞轮廓（给 TIMI / Imagen / 布局 JSON 共用） */
+export function avatarFrameShapeIntentPromptEn(shape: 'circle' | 'square'): string {
+  const trend =
+    shape === 'circle'
+      ? 'radial / softly rounded overall rhythm—decorations cluster around an implied round portrait area'
+      : 'gentle card-like / squarish massing—corners feel slightly boxed but still organic, not a sharp square wireframe'
+  return [
+    `Shape intent (composition trend ONLY, NOT a visible outline): ${trend}.`,
+    'Do NOT draw: a crisp geometric ring, inner circle/square stroke, bezel line, UI template border, metal rim tracing the hole, or any single continuous contour line that outlines the avatar cutout.',
+    'The portrait opening must read as negative space formed by motif density, overlap, feathering, and organic gaps—never a hard vector-like traced circle or rectangle.',
+  ].join('\n')
 }
 
 function layoutSimilarityNote(sim: number) {
@@ -764,7 +825,6 @@ export async function extractAvatarFramePixelLayout({
   userPrompt,
   referenceSimilarity = 70,
   images,
-  model,
 }: ExtractAvatarFramePixelLayoutOptions): Promise<{ plan: PixelFramePlan; analysisText: string }> {
   if (images.length === 0) {
     throw new Error('至少需要一张参考图')
@@ -788,7 +848,7 @@ export async function extractAvatarFramePixelLayout({
     'You are a STRICT layout-only planner for an avatar FRAME (decorative ring around a center hole).',
     'The user attached REAL reference images. The final rendered frame will ONLY draw pixels from those exact files via imageId.',
     'You must NOT invent textures, clipart, characters, or motifs that are not present in the attachments.',
-    'Your job: decide where each imageId is placed on a 1:1 canvas (0,0 top-left; 1,1 bottom-right), scale, rotation, opacity, z-order, and an optional hole border.',
+    'Your job: decide where each imageId is placed on a 1:1 canvas (0,0 top-left; 1,1 bottom-right), scale, rotation, opacity, z-order, and optional borderWidth (almost always 0—no visible geometric rim).',
     '',
     simNote,
     '',
@@ -797,24 +857,27 @@ export async function extractAvatarFramePixelLayout({
     '',
     'Hard rules:',
     '- Return ONLY one JSON object, no markdown fences, no commentary.',
-    '- Keys: placements (array), borderWidth (number 0–24), borderColor (CSS hex, e.g. "#6366f1").',
+    '- Keys: placements (array), borderWidth (number 0–24, **prefer 0**: no stroked hole outline; avoid “template ring” look), borderColor (CSS hex, only if borderWidth>0).',
     '- placements[] entries: imageId (string, MUST be one of the allowed ids), x, y in [0,1] for CENTER of that asset, scale (~0.2–1.25), rotateDeg (-180..180), opacity (0.35–1), zIndex (integer).',
     '- Every allowed imageId must appear in placements at least once.',
     '- You may reuse the same imageId multiple times if it helps symmetry.',
-    `- Frame shape for visual planning: ${shape === 'circle' ? 'circular hole in center' : 'rounded-square hole in center'}.`,
+    `- Shape trend for planning (NOT a drawn edge): ${shape === 'circle' ? 'soft radial balance around center' : 'soft squarish/card-like balance around center'}—motifs imply the hole; never plan for a stroked contour.`,
     `- Put MORE decorative weight toward these quadrants: ${quadrantText}.`,
     '',
     'Example shape (values are illustrative; you must use real ids from the list):',
-    '{"placements":[{"imageId":"<REAL_ID>","x":0.72,"y":0.30,"scale":0.88,"rotateDeg":-6,"opacity":1,"zIndex":0}],"borderWidth":6,"borderColor":"#6366f1"}',
+    '{"placements":[{"imageId":"<REAL_ID>","x":0.72,"y":0.30,"scale":0.88,"rotateDeg":-6,"opacity":1,"zIndex":0}],"borderWidth":0,"borderColor":"#6366f1"}',
     '',
     'User intent for LAYOUT (not new art):',
     userPrompt?.trim() || 'Arrange references evenly around the ring, cohesive silhouette.',
   ].join('\n')
 
+  // 布局推理不需要大模型：固定 Flash + 更小参考图，显著提速
   const analysis = await generateWithGemini({
-    model: model || MODEL_VISION_FAST,
+    model: MODEL_VISION_FAST,
     text,
     imageDataUrls: images.map(i => i.dataUrl),
+    compressMaxEdge: 560,
+    compressQuality: 0.78,
   })
 
   const start = analysis.indexOf('{')
@@ -871,6 +934,8 @@ export type AvatarFrameRedrawFromRefsOptions = {
   images: Array<{ label: string; dataUrl: string }>
   /** Imagen 出图张数 1–3，默认 1（快很多） */
   imageOutputCount?: number
+  /** 与展示面板「出图尺寸」一致；Imagen 无精确像素 API，写入提示词引导细节量 */
+  outputImageSize?: '1K' | '2K'
 }
 
 /**
@@ -884,6 +949,7 @@ export async function generateAvatarFrameRedrawFromRefs({
   referenceSimilarity = 70,
   images,
   imageOutputCount = 1,
+  outputImageSize = '1K',
 }: AvatarFrameRedrawFromRefsOptions) {
   const nOut = Math.min(3, Math.max(1, Math.round(imageOutputCount)))
   const simGuide = redrawSimilarityGuidanceEn(referenceSimilarity)
@@ -909,7 +975,7 @@ export async function generateAvatarFrameRedrawFromRefs({
     'User intent:',
     userPrompt?.trim() || '(none)',
     '',
-    `Frame shape: ${shape === 'circle' ? 'circle' : 'rounded square'}`,
+    avatarFrameShapeIntentPromptEn(shape),
     `Preferred decoration quadrants: ${quadrantText}`,
     `Reference similarity slider (0-100, higher = closer to refs): ${referenceSimilarity}`,
     '',
@@ -921,6 +987,8 @@ export async function generateAvatarFrameRedrawFromRefs({
     model: MODEL_VISION_FAST,
     text,
     imageDataUrls: images.map(i => i.dataUrl),
+    compressMaxEdge: outputImageSize === '2K' ? 720 : 640,
+    compressQuality: 0.8,
   })
 
   const start = analysis.indexOf('{')
@@ -940,13 +1008,19 @@ export async function generateAvatarFrameRedrawFromRefs({
   const lighting = typeof recipe?.lighting === 'string' ? recipe.lighting : ''
   const compositionNotes = typeof recipe?.compositionNotes === 'string' ? recipe.compositionNotes : ''
 
+  const detailTier =
+    outputImageSize === '2K'
+      ? 'Detail tier: HIGH (~2K intent) — preserve fine ornament edges, micro-textures, and crisp anti-aliased contours.'
+      : 'Detail tier: STANDARD (~1K intent) — clean readable shapes; avoid ultra-fine noise that slows rendering.'
+
   const imagenPrompt = [
     'Create a high-quality 1:1 PNG avatar frame with a fully transparent background (no solid background).',
+    detailTier,
     'The output must be ONE cohesive, unified design in a single consistent art style.',
     'No text, no watermark, no logo.',
     'Do NOT collage, photobash, paste photos, or show rectangular cutout edges. Avoid any “sticker sheet” look.',
     'Avoid obvious stock asset vibes; everything must share consistent line weight, shading model, and material rendering.',
-    `Frame shape: ${shape === 'circle' ? 'circular avatar hole' : 'rounded-square avatar hole'} in the center.`,
+    avatarFrameShapeIntentPromptEn(shape),
     `Decoration emphasis quadrants: ${quadrantText}.`,
     simGuide,
     '',
@@ -961,7 +1035,7 @@ export async function generateAvatarFrameRedrawFromRefs({
     compositionNotes ? `Composition notes: ${compositionNotes}.` : '',
     doNot ? `Avoid: ${doNot}.` : '',
     '',
-    'Extra negatives: text, watermark, logo, QR code, signature, UI, frame mockup, border around the whole image.',
+    'Extra negatives: text, watermark, logo, QR code, signature, UI, frame mockup, border around the whole image, circular or square stroked outline tracing the inner portrait hole, geometric ring/bezel contour, obvious template frame edge.',
   ]
     .filter(Boolean)
     .join('\n')

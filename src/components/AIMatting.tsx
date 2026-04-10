@@ -716,7 +716,7 @@ export default function AIMatting({
         <div className="pb-3 border-b border-slate-800/70">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <div className="text-base font-semibold text-slate-100 tracking-tight">AI Matting</div>
+              <div className="text-base font-semibold text-slate-100 tracking-tight">智能抠图</div>
               <div className="text-[11px] text-slate-400 mt-0.5">通用/实物 · 透明/玻璃 · 本地像素算法</div>
             </div>
             <span className="text-[10px] px-2 py-1 rounded-full border border-slate-800/70 bg-slate-950/40 text-slate-400">

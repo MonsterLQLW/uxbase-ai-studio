@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import ReactFlow, {
   Background,
   addEdge,
@@ -13,6 +13,7 @@ import ReactFlow, {
 } from 'reactflow'
 import 'reactflow/dist/style.css'
 import {
+  avatarFrameShapeIntentPromptEn,
   extractAvatarFramePixelLayout,
   generateAvatarFrameRedrawFromRefs,
   generateImageWithImagen,
@@ -92,6 +93,49 @@ export type FlowState = {
   similarAnalysis: string
   similarAnalysisEngine: 'gemini' | 'timi-chat'
   generateImageVariantCount: 1 | 3
+}
+
+/** 与首次进入页面对齐的空白状态（清空画布） */
+function createEmptyAvatarFrameFlowState(): FlowState {
+  return {
+    shape: 'circle',
+    quadrants: ['lt'],
+    images: [],
+    aiModel: 'gemini-3-flash-preview',
+    aiPrompt: '',
+    referenceSimilarity: 70,
+    aiResult: '',
+    generatedImageDataUrls: [],
+    timiImageSize: '1K',
+    composite: {
+      elements: [],
+      borderWidth: 0,
+      borderColor: '#6366f1',
+      glow: 0.25,
+    },
+    colorTheme: {
+      images: [],
+      engine: 'gemini',
+      model: 'gemini-2.5-flash',
+      style: '',
+      bullets: [],
+      keywords: [],
+      colors: [],
+      raw: '',
+    },
+    regionalConstraints: {
+      lt: { enabled: true, prompt: '', assets: [] },
+      rt: { enabled: false, prompt: '', assets: [] },
+      lb: { enabled: false, prompt: '', assets: [] },
+      rb: { enabled: false, prompt: '', assets: [] },
+      frame: { enabled: true, prompt: '', assets: [] },
+    },
+    similarReferences: [],
+    similarKeywords: [],
+    similarAnalysis: '',
+    similarAnalysisEngine: 'gemini',
+    generateImageVariantCount: 1,
+  }
 }
 
 type CustomNodeData = {
@@ -747,7 +791,9 @@ function buildQuadrantBrief(state: FlowState): string {
     { id: 'rb', name: '右下(RB)' },
   ]
   const lines: string[] = []
-  lines.push(`形状: ${state.shape === 'circle' ? '圆形' : '方形'}`)
+  lines.push(
+    `形状趋势: ${state.shape === 'circle' ? '偏圆形构图（柔和向心，不要画明显圆线描边洞轮廓）' : '偏方正构图（略带回角体量感，不要画明显方框描边洞轮廓）'}`,
+  )
 
   // 同类参考/颜色定位作为“风格锚点”
   const kw = (state.similarKeywords || []).slice(0, 10).filter(Boolean)
@@ -1037,6 +1083,36 @@ function PreviewNode({ data }: NodeProps<CustomNodeData>) {
   const [redrawLoading, setRedrawLoading] = useState(false)
   const [scratchLoading, setScratchLoading] = useState(false)
   const [parseError, setParseError] = useState<string | null>(null)
+  const [progress, setProgress] = useState<{ active: boolean; value: number }>({ active: false, value: 0 })
+
+  const isAnyGenerating = imgLoading || redrawLoading || scratchLoading
+
+  useEffect(() => {
+    if (!isAnyGenerating) {
+      // finish animation and hide shortly
+      setProgress(p => {
+        if (!p.active) return p
+        return { active: true, value: 100 }
+      })
+      const t = window.setTimeout(() => setProgress({ active: false, value: 0 }), 450)
+      return () => window.clearTimeout(t)
+    }
+
+    // start a fake-but-informative progress ramp
+    setProgress({ active: true, value: 6 })
+    const startedAt = Date.now()
+    const tick = () => {
+      const elapsed = Date.now() - startedAt
+      // ease to 92% over ~18s (never reach 100% until done)
+      const target = 92
+      const k = 1 - Math.exp(-elapsed / 5500)
+      const next = Math.min(target, Math.max(6, Math.round(6 + (target - 6) * k)))
+      setProgress(p => (p.active ? { active: true, value: Math.max(p.value, next) } : p))
+    }
+    tick()
+    const id = window.setInterval(tick, 200)
+    return () => window.clearInterval(id)
+  }, [isAnyGenerating])
 
   const jobRef = useRef<{ id: string; cancelled: boolean } | null>(null)
   const startJob = useCallback(() => {
@@ -1068,7 +1144,6 @@ function PreviewNode({ data }: NodeProps<CustomNodeData>) {
         userPrompt: userNeed,
         referenceSimilarity,
         images: regionalImages.map((i, idx) => ({ id: String(idx), label: i.label, dataUrl: normalized[idx] || i.dataUrl })),
-        model: String(aiModel),
       })
       if (isCancelled(jobId)) return
 
@@ -1105,17 +1180,18 @@ function PreviewNode({ data }: NodeProps<CustomNodeData>) {
 
       if (isTimiModel(aiModel)) {
         const userNeed = aiPrompt?.trim() || '参考图片风格的头像框，装饰性边框，透明背景，无文字，统一风格'
+        const size = timiImageSize || '1K'
         const imageDataUrls = await generateImageWithTIMI({
           timiModel: aiModel,
           prompt: [
-            `Create an avatar frame with ${shape === 'circle' ? 'circular' : 'rounded square'} center hole.`,
+            avatarFrameShapeIntentPromptEn(shape),
             'Fully transparent background, no text, no watermark, no logo.',
             userNeed,
             `Reference similarity: ${referenceSimilarity}/100.`,
-          ].join('\n'),
+          ].join('\n\n'),
           referenceImages: await normalizeImageUrls(regionalImages.map(i => i.dataUrl)),
           aspectRatio: '1:1',
-          imageSize: timiImageSize || '1K',
+          imageSize: size,
         })
         if (isCancelled(jobId)) return
         data.setState(prev => ({
@@ -1135,6 +1211,7 @@ function PreviewNode({ data }: NodeProps<CustomNodeData>) {
         referenceSimilarity,
         images: regionalImages.map((i, idx) => ({ ...i, dataUrl: normalizedRefs[idx] || i.dataUrl })),
         imageOutputCount: generateImageVariantCount,
+        outputImageSize: timiImageSize || '1K',
       })
       if (isCancelled(jobId)) return
       data.setState(prev => ({ ...prev, aiResult: analysisText, generatedImageDataUrls: imageDataUrls }))
@@ -1142,7 +1219,7 @@ function PreviewNode({ data }: NodeProps<CustomNodeData>) {
       if (!isCancelled(jobId)) setParseError(e?.message || '生成失败')
     }
     if (!isCancelled(jobId)) setRedrawLoading(false)
-  }, [aiModel, aiPrompt, data, generateImageVariantCount, isCancelled, quadrants, referenceSimilarity, regionalImages, shape, startJob])
+  }, [aiModel, aiPrompt, data, generateImageVariantCount, isCancelled, quadrants, referenceSimilarity, regionalImages, shape, startJob, timiImageSize])
 
   const generateFromScratch = useCallback(async () => {
     const jobId = startJob()
@@ -1154,27 +1231,34 @@ function PreviewNode({ data }: NodeProps<CustomNodeData>) {
       const style = aiPrompt?.trim() || 'high quality, cute, decorative, no text'
 
       if (isTimiModel(aiModel)) {
+        const size = timiImageSize || '1K'
         const img = await generateImageWithTIMI({
           timiModel: aiModel,
           prompt: [
-            `Design an avatar frame PNG (no text) for a profile picture.`,
-            `Frame shape: ${shape === 'circle' ? 'circle' : 'rounded square'}.`,
+            'Design an avatar frame PNG (no text) for a profile picture.',
+            avatarFrameShapeIntentPromptEn(shape),
             `Decorative element placement quadrant: ${q}.`,
             'Style requirements:',
             style,
           ].join('\n'),
           aspectRatio: '1:1',
-          imageSize: timiImageSize || '1K',
+          imageSize: size,
         })
         if (isCancelled(jobId)) return
         data.setState(prev => ({ ...prev, generatedImageDataUrls: img }))
         return
       }
 
+      const outSz = timiImageSize || '1K'
+      const detail =
+        outSz === '2K'
+          ? 'Detail tier: HIGH (~2K intent) — crisp ornaments and fine edges.'
+          : 'Detail tier: STANDARD (~1K intent) — clean shapes, efficient detail.'
       const img = await generateImageWithImagen({
         prompt: [
           'Design an avatar frame PNG (no text) for a profile picture.',
-          `Frame shape: ${shape === 'circle' ? 'circle' : 'rounded square'}.`,
+          detail,
+          avatarFrameShapeIntentPromptEn(shape),
           `Decorative element placement quadrant: ${q}.`,
           'Style requirements:',
           style,
@@ -1197,27 +1281,28 @@ function PreviewNode({ data }: NodeProps<CustomNodeData>) {
       <Handle type="target" position={Position.Left} className="!bg-slate-600" />
       <div className="text-xs text-slate-400 mb-3">4) 展示（预览汇总）</div>
 
-      {isTimiModel(aiModel) && (
-        <div className="mb-3">
-          <div className="text-[11px] text-slate-500 mb-1">TIMI 出图尺寸</div>
-          <select
-            value={timiImageSize || '1K'}
-            onChange={e =>
-              data.setState(prev => ({
-                ...prev,
-                timiImageSize: (e.target.value === '2K' ? '2K' : '1K') as any,
-              }))
-            }
-            className="w-full rounded-lg bg-slate-900 border border-slate-700 px-2 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
-          >
-            <option value="1K">1K（更快）</option>
-            <option value="2K">2K（更清晰、更慢）</option>
-          </select>
-          <div className="mt-1 text-[11px] text-slate-500">
-            2K 更容易超时；若遇到 504 建议改回 1K 或减少参考图数量。
-          </div>
+      <div className="mb-3">
+        <div className="text-[11px] text-slate-500 mb-1">出图尺寸</div>
+        <select
+          value={timiImageSize || '1K'}
+          onChange={e =>
+            data.setState(prev => ({
+              ...prev,
+              timiImageSize: (e.target.value === '2K' ? '2K' : '1K') as any,
+            }))
+          }
+          className="w-full rounded-lg bg-slate-900 border border-slate-700 px-2 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+        >
+          <option value="1K">1K（更快）</option>
+          <option value="2K">2K（更清晰、更慢）</option>
+        </select>
+        <div className="mt-1 text-[11px] text-slate-500">
+          {isTimiModel(aiModel)
+            ? 'TIMI：作为 image_size 参数下发，并在提示词中再次强调。'
+            : 'Gemini / Imagen：无精确像素档位 API，会通过提示词控制细节量；TIMI 模型下才会真正改请求分辨率。'}
+          {' '}2K 更容易超时。
         </div>
-      )}
+      </div>
 
       <div className="flex gap-4 items-start">
         <div className="relative">
@@ -1363,6 +1448,24 @@ function PreviewNode({ data }: NodeProps<CustomNodeData>) {
               {parseError && <div className="text-xs text-amber-400">{parseError}</div>}
             </div>
 
+            {progress.active && (
+              <div className="mt-2">
+                <div className="flex items-center justify-between text-[11px] text-slate-400">
+                  <span>生成进度</span>
+                  <span className="tabular-nums">{Math.min(99, Math.max(1, progress.value))}%</span>
+                </div>
+                <div className="mt-1 h-2 w-full rounded-full border border-slate-800 bg-slate-950/40 overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-indigo-500/70 transition-[width] duration-200"
+                    style={{ width: `${Math.min(100, Math.max(2, progress.value))}%` }}
+                  />
+                </div>
+                <div className="mt-1 text-[10px] text-slate-500">
+                  若超过 30 秒仍无结果，建议切到 1K、减少参考图数量或换“稳定”模型。
+                </div>
+              </div>
+            )}
+
             {data.state.generatedImageDataUrls.length > 0 && (
               <div className="mt-3">
                 <div className="text-[11px] text-slate-500 mb-1">生成结果</div>
@@ -1398,10 +1501,46 @@ type AvatarFrameDesignerProps = {
 export default function AvatarFrameDesigner({ state, onStateChange }: AvatarFrameDesignerProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState<CustomNodeData>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
+  const [paneContextMenu, setPaneContextMenu] = useState<{ x: number; y: number } | null>(null)
+  const [creatorNav, setCreatorNav] = useState<'avatar' | 'honor' | 'action' | 'ui' | 'icon'>('avatar')
 
   const setFlowState = useCallback((updater: (prev: FlowState) => FlowState) => {
     onStateChange(updater)
   }, [onStateChange])
+
+  const closePaneContextMenu = useCallback(() => setPaneContextMenu(null), [])
+
+  const clearCanvasToEmpty = useCallback(() => {
+    onStateChange(() => createEmptyAvatarFrameFlowState())
+    closePaneContextMenu()
+  }, [onStateChange, closePaneContextMenu])
+
+  const onFlowPaneContextMenu = useCallback((e: ReactMouseEvent<HTMLDivElement>) => {
+    const el = e.target as HTMLElement
+    if (el.closest('.react-flow__node')) return
+    if (el.closest('.react-flow__edge')) return
+    if (!el.closest('.react-flow__pane')) return
+    e.preventDefault()
+    setPaneContextMenu({ x: e.clientX, y: e.clientY })
+  }, [])
+
+  useEffect(() => {
+    if (!paneContextMenu) return
+    const onDown = (ev: MouseEvent) => {
+      const t = ev.target as HTMLElement
+      if (t.closest?.('[data-avatar-frame-ctx-menu]')) return
+      closePaneContextMenu()
+    }
+    const onKey = (ev: KeyboardEvent) => {
+      if (ev.key === 'Escape') closePaneContextMenu()
+    }
+    window.addEventListener('mousedown', onDown, true)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('mousedown', onDown, true)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [paneContextMenu, closePaneContextMenu])
 
   const nodeTypes = useMemo(
     () => ({
@@ -1490,21 +1629,87 @@ export default function AvatarFrameDesigner({ state, onStateChange }: AvatarFram
   )
 
   return (
-    <div className="h-full w-full">
-      <div className="h-full w-full">
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onConnect={onConnect}
-          nodeTypes={nodeTypes}
-          fitView
-          fitViewOptions={{ padding: 0.2 }}
-          proOptions={{ hideAttribution: true }}
-        >
-          <Background gap={16} size={1} color="#1f2937" />
-        </ReactFlow>
+    <div className="flex h-full w-full min-h-0 flex-col">
+      {/* 左侧导航（与输出工具风格一致） */}
+      <div className="absolute left-0 top-0 bottom-0 w-[156px] z-10 flex flex-col border-r border-slate-800/60 bg-slate-950/55 backdrop-blur-md">
+        <div className="pt-4 pb-3">
+          <div className="mt-1 mx-1.5 w-[calc(100%-12px)] text-[10px] text-indigo-300/15">选择一个模块</div>
+        </div>
+        <div className="flex-1 overflow-y-auto py-2">
+          {(
+            [
+              { id: 'avatar' as const, name: '头像框' },
+              { id: 'honor' as const, name: '荣耀播报' },
+              { id: 'action' as const, name: '个性动作' },
+              { id: 'ui' as const, name: '按钮/弹窗设计' },
+              { id: 'icon' as const, name: '图标细化' },
+            ] as const
+          ).map(nav => (
+            <button
+              key={nav.id}
+              type="button"
+              onClick={() => setCreatorNav(nav.id)}
+              className={`group relative mx-1.5 my-1 w-[calc(100%-12px)] rounded-xl px-2.5 py-2 text-left text-[13px] transition-colors duration-150 ${
+                creatorNav === nav.id ? 'bg-indigo-500/12 text-indigo-300' : 'text-slate-300 hover:bg-slate-800/25 hover:text-slate-100'
+              }`}
+            >
+              <div className="min-w-0">
+                <div className="truncate">{nav.name}</div>
+                {nav.id === 'avatar' && <div className="mt-0.5 truncate text-[10px] text-indigo-300/15">Avatar Frame</div>}
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* 右侧画布区域 */}
+      <div
+        className="flex-1 min-h-0 w-full relative ml-[156px]"
+        onContextMenu={e => {
+          // 仅“头像框”模块允许右键清空画布
+          if (creatorNav !== 'avatar') return
+          onFlowPaneContextMenu(e)
+        }}
+      >
+        {creatorNav !== 'avatar' ? (
+          <div className="absolute inset-0 flex items-center justify-center bg-slate-950/40">
+            <p className="text-sm text-slate-400">模板搭建中</p>
+          </div>
+        ) : (
+          <>
+            <div className="absolute inset-0" onContextMenu={onFlowPaneContextMenu}>
+              <ReactFlow
+                nodes={nodes}
+                edges={edges}
+                onNodesChange={onNodesChange}
+                onEdgesChange={onEdgesChange}
+                onConnect={onConnect}
+                nodeTypes={nodeTypes}
+                fitView
+                fitViewOptions={{ padding: 0.2 }}
+                proOptions={{ hideAttribution: true }}
+              >
+                <Background gap={16} size={1} color="#1f2937" />
+              </ReactFlow>
+            </div>
+            {paneContextMenu && (
+              <div
+                data-avatar-frame-ctx-menu
+                className="fixed z-50 min-w-[180px] rounded-xl border border-slate-800 bg-slate-950/95 backdrop-blur shadow-[0_18px_60px_rgba(0,0,0,0.55)] overflow-hidden"
+                style={{ left: paneContextMenu.x, top: paneContextMenu.y }}
+                onMouseDown={e => e.stopPropagation()}
+              >
+                <button
+                  type="button"
+                  className="w-full text-left px-3 py-2 text-sm text-slate-200 hover:bg-slate-800/60 transition"
+                  onClick={() => clearCanvasToEmpty()}
+                >
+                  清空画布
+                </button>
+              </div>
+            )}
+          </>
+        )}
       </div>
     </div>
   )

@@ -149,7 +149,8 @@ function timiProxyPlugin(): PluginOption {
 export default defineConfig({
   plugins: [react(), tailwindcss(), timiProxyPlugin()],
   server: {
+    host: true,
     port: 5175,
-    strictPort: true,
+    strictPort: false,
   },
 })

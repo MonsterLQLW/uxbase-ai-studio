@@ -61,12 +61,12 @@ export default function ChatPanel() {
   }
 
   return (
-    <div className="flex flex-col h-full p-6">
+    <div className="flex h-full min-h-0 flex-col">
       {/* 消息列表 */}
-      <div className="flex-1 overflow-y-auto space-y-4 mb-4">
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pb-4 pr-0.5">
         {messages.length === 0 && (
-          <div className="text-center text-slate-500 mt-20">
-            <p className="text-lg mb-2">👋 欢迎使用 UXbase AI Studio</p>
+          <div className="flex min-h-[40vh] flex-col items-center justify-center px-4 text-center text-slate-500">
+            <p className="mb-2 text-lg">👋 欢迎使用 UXbase AI Studio</p>
             <p className="text-sm">输入消息或上传图片开始对话</p>
           </div>
         )}
@@ -106,62 +106,60 @@ export default function ChatPanel() {
 
       {/* 图片预览 */}
       {selectedImage && (
-        <div className="mb-3 flex items-center gap-2">
+        <div className="flex flex-shrink-0 items-center gap-2 pb-3">
           <img src={selectedImage} alt="预览" className="h-16 rounded-lg object-cover" />
           <button
             onClick={() => setSelectedImage(null)}
-            className="text-xs bg-red-500/80 hover:bg-red-500 text-white rounded-full px-2 py-0.5"
+            className="rounded-full bg-red-500/80 px-2 py-0.5 text-xs text-white hover:bg-red-500"
           >
             移除
           </button>
         </div>
       )}
 
-      {/* 模型选择器 + 输入区 */}
-      <div className="space-y-2">
-        <div className="flex items-center gap-2">
+      {/* 底部：模型 + 输入（与 Layout pb-10 留底边呼吸空间） */}
+      <div className="flex flex-shrink-0 flex-col gap-3 border-t border-slate-800/90 pt-4">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => setChatModel('gemini')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+            className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
               chatModel === 'gemini'
                 ? 'bg-indigo-600 text-white'
-                : 'bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-700'
+                : 'border border-slate-700 bg-slate-800 text-slate-400 hover:text-slate-200'
             }`}
           >
             ✨ Gemini
           </button>
           <button
             onClick={() => setChatModel('timi')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+            className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
               chatModel === 'timi'
                 ? 'bg-blue-600 text-white'
-                : 'bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-700'
+                : 'border border-slate-700 bg-slate-800 text-slate-400 hover:text-slate-200'
             }`}
           >
             🤖 TIMI AI
           </button>
         </div>
-      {/* 输入区 */}
-      <div className="flex gap-2 items-end">
-        <input
-          type="file"
-          ref={fileInputRef}
-          accept="image/*"
-          onChange={handleImageUpload}
-          className="hidden"
-          id="image-upload"
-        />
-        <label
-          htmlFor="image-upload"
-          className="bg-slate-800 hover:bg-slate-700 border border-slate-700 
-            p-3 rounded-xl cursor-pointer transition flex-shrink-0
-            flex items-center justify-center"
-          title="上传图片"
-        >
-          <ImageIcon size={20} className="text-slate-400" />
-        </label>
 
-        <div className="flex-1">
+        {/* 底行：三列 grid + items-end，保证输入框与两侧按钮底边齐平 */}
+        <div className="grid w-full grid-cols-[3rem_1fr_3rem] items-end gap-2.5">
+          <input
+            type="file"
+            ref={fileInputRef}
+            accept="image/*"
+            onChange={handleImageUpload}
+            className="hidden"
+            id="image-upload"
+          />
+          <label
+            htmlFor="image-upload"
+            className="flex h-12 w-full cursor-pointer items-center justify-center rounded-xl border border-slate-700 bg-slate-800 transition hover:bg-slate-700"
+            title="上传图片"
+          >
+            <ImageIcon size={20} className="text-slate-400" />
+          </label>
+
           <textarea
             value={input}
             onChange={e => setInput(e.target.value)}
@@ -172,23 +170,19 @@ export default function ChatPanel() {
               }
             }}
             rows={1}
-            className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 
-              focus:outline-none focus:border-indigo-500 resize-none text-sm
-              placeholder:text-slate-500"
+            className="min-h-12 w-full max-h-[7.5rem] resize-none rounded-xl border border-slate-700 bg-slate-800 px-3 py-2.5 text-sm leading-5 text-slate-200 placeholder:text-slate-500 box-border focus:border-indigo-500 focus:outline-none focus:ring-0"
             placeholder={chatModel === 'timi' ? '问 TIMI AI...（支持上传图片）' : '问 Gemini...（支持上传图片）'}
-            style={{ minHeight: '48px', maxHeight: '120px' }}
           />
-        </div>
 
-        <button
-          onClick={send}
-          disabled={loading}
-          className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-800 
-            p-3 rounded-xl transition flex-shrink-0 flex items-center justify-center"
-        >
-          <Send size={20} />
-        </button>
-      </div>
+          <button
+            type="button"
+            onClick={send}
+            disabled={loading}
+            className="flex h-12 w-full items-center justify-center rounded-xl bg-indigo-600 transition hover:bg-indigo-700 disabled:bg-indigo-800"
+          >
+            <Send size={20} />
+          </button>
+        </div>
       </div>
     </div>
   )

@@ -508,41 +508,6 @@ function OtStackNode({ data }: NodeProps<OutputNodeData>) {
   )
 }
 
-function OtAdjustNode({ data }: NodeProps<OutputNodeData>) {
-  const ctx = data.ctx
-  if (!ctx) return <div className="rounded-xl border border-slate-800 min-w-[280px] h-[120px]" />
-  const bar = data.title?.includes('紫') ? '!bg-violet-500' : '!bg-sky-500'
-  return (
-    <OtShell title={data.title} className="min-w-[280px]">
-      <Handle type="target" position={Position.Left} className={bar} />
-      <Handle type="source" position={Position.Right} className={bar} />
-      <div className="text-xs text-slate-400 mb-2">预览内：滚轮缩放角色 · 左键拖拽平移</div>
-      <div>
-        <div className="flex justify-between text-xs text-slate-500 mb-1">
-          <span>角色缩放</span>
-          <span className="tabular-nums text-slate-200">{ctx.charScale.toFixed(2)}</span>
-        </div>
-        <input
-          type="range"
-          min={0.7}
-          max={2.4}
-          step={0.01}
-          value={ctx.charScale}
-          onChange={e => ctx.setCharScale(Number(e.target.value))}
-          className="w-full h-2 accent-indigo-500 cursor-pointer"
-        />
-      </div>
-      <button
-        type="button"
-        onClick={() => ctx.resetCharacterTransform()}
-        className="mt-3 w-full rounded-lg border border-slate-700 px-2 py-2 text-xs text-slate-200 hover:border-slate-600 transition"
-      >
-        重置角色位置与缩放
-      </button>
-    </OtShell>
-  )
-}
-
 function OtOutputNode({ data }: NodeProps<OutputNodeData>) {
   const ctx = data.ctx
   if (!ctx) {
@@ -652,7 +617,7 @@ export const OUTPUT_TOOL_FLOW_LAYOUT_TEMPLATE = {
   uploadHalfHeight: 112,
   /** 输出预览节点更高，顶边 = 中点 − 半高 */
   outputHalfHeight: 268,
-  /** 输出列更宽，与「位置微调」列的额外水平留白 */
+  /** 输出列与模版列之间的额外水平留白 */
   outputColumnExtraGap: 80,
 } as const
 
@@ -667,7 +632,6 @@ function buildAverageOutputToolNodes(base: Node<OutputNodeData>[]): Node<OutputN
   const x0 = t.canvasMarginLeft
   const x1 = x0 + step
   const x2 = x1 + step
-  const x3 = x2 + step
 
   const yBlue = t.rowBlueTop
   const yPurple = t.rowBlueTop + t.blueRowAnchorHeight + t.rowGapBetweenPaths
@@ -675,10 +639,8 @@ function buildAverageOutputToolNodes(base: Node<OutputNodeData>[]): Node<OutputN
   const pos: Record<string, { x: number; y: number }> = {
     upload: { x: x0 + 10, y: yBlue },
     tplBlue: { x: x1, y: yBlue },
-    adjBlue: { x: x2, y: yBlue },
     tplPurple: { x: x1, y: yPurple + 300 - 100 - 20 - 20 },
-    adjPurple: { x: x2, y: yPurple - 100 - 50 },
-    output: { x: x3 + t.outputColumnExtraGap - 60, y: yBlue },
+    output: { x: x2 + t.outputColumnExtraGap - 60, y: yBlue },
   }
   return base.map(n => {
     const p = pos[n.id]
@@ -689,19 +651,15 @@ function buildAverageOutputToolNodes(base: Node<OutputNodeData>[]): Node<OutputN
 const STATIC_OT_NODES: Node<OutputNodeData>[] = buildAverageOutputToolNodes([
   { id: 'upload', type: 'otUpload', position: { x: 0, y: 0 }, data: { title: '上传资源' } },
   { id: 'tplBlue', type: 'otTemplateBlue', position: { x: 0, y: 0 }, data: { title: '模版 1（蓝色·着色层）' } },
-  { id: 'adjBlue', type: 'otAdjust', position: { x: 0, y: 0 }, data: { title: '位置微调（蓝线）' } },
   { id: 'tplPurple', type: 'otTemplatePurple', position: { x: 0, y: 0 }, data: { title: '模版 2（紫色·着色层）' } },
-  { id: 'adjPurple', type: 'otAdjust', position: { x: 0, y: 0 }, data: { title: '位置微调（紫线）' } },
   { id: 'output', type: 'otOutput', position: { x: 0, y: 0 }, data: { title: '输出资源（2 张对比）' } },
 ])
 
 const OT_INITIAL_EDGES: Edge[] = [
   { id: 'ot-u-b', source: 'upload', sourceHandle: 'to-blue', target: 'tplBlue', animated: true, style: { stroke: '#38bdf8' } },
   { id: 'ot-u-p', source: 'upload', sourceHandle: 'to-purple', target: 'tplPurple', animated: true, style: { stroke: '#a78bfa' } },
-  { id: 'ot-b1', source: 'tplBlue', target: 'adjBlue', animated: true, style: { stroke: '#38bdf8' } },
-  { id: 'ot-b3', source: 'adjBlue', target: 'output', targetHandle: 'in-merge', animated: true, style: { stroke: '#38bdf8' } },
-  { id: 'ot-p1', source: 'tplPurple', target: 'adjPurple', animated: true, style: { stroke: '#a78bfa' } },
-  { id: 'ot-p3', source: 'adjPurple', target: 'output', targetHandle: 'in-merge', animated: true, style: { stroke: '#a78bfa' } },
+  { id: 'ot-b1', source: 'tplBlue', target: 'output', targetHandle: 'in-merge', animated: true, style: { stroke: '#38bdf8' } },
+  { id: 'ot-p1', source: 'tplPurple', target: 'output', targetHandle: 'in-merge', animated: true, style: { stroke: '#a78bfa' } },
 ]
 
 /** 输出工具 Tab 定义 */
@@ -1336,7 +1294,6 @@ export default function OutputTool() {
       otTemplateBlue: OtTemplateBlueNode,
       otTemplatePurple: OtTemplatePurpleNode,
       otStack: OtStackNode,
-      otAdjust: OtAdjustNode,
       otOutput: OtOutputNode,
     }),
     [],

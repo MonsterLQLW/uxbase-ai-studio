@@ -36,6 +36,7 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
     activeTab === 'avatar-frame' ||
     activeTab === 'ai-matting' ||
     activeTab === 'output-tool'
+  const isChatTab = activeTab === 'chat'
   return (
     <div className="flex flex-col h-screen bg-slate-950 text-slate-200">
       {/* 顶部导航 */}
@@ -81,8 +82,18 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
       </header>
 
       {/* 主内容 */}
-      <main className="flex-1 overflow-hidden">
-        <div className={isCanvasTab ? 'w-full h-full' : 'max-w-7xl mx-auto px-6 py-8 h-full'}>{children}</div>
+      <main className="flex-1 min-h-0 overflow-hidden">
+        <div
+          className={
+            isCanvasTab
+              ? 'w-full h-full min-h-0'
+              : isChatTab
+                ? 'max-w-7xl mx-auto h-full min-h-0 px-6 pt-8 pb-10'
+                : 'max-w-7xl mx-auto h-full min-h-0 px-6 py-8'
+          }
+        >
+          {children}
+        </div>
       </main>
     </div>
   )

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ChangeEvent } from 'react'
 import ReactFlow, {
   Background,
   addEdge,
@@ -24,6 +24,16 @@ import {
   type TIMIImageModel,
 } from '../services/gemini'
 import { renderAvatarFrameFromPlan } from '../lib/avatarFramePixelComposite'
+import {
+  loadHistory,
+  saveHistory,
+  addHistoryEntry,
+  deleteHistoryEntry,
+  clearHistory,
+  formatTimestamp,
+  getAutoSaveInterval,
+  type HistoryEntry,
+} from '../lib/stateHistory'
 
 type ShapeKind = 'circle' | 'square'
 type Quadrant = 'lt' | 'lb' | 'rt' | 'rb'
@@ -1504,9 +1514,100 @@ export default function AvatarFrameDesigner({ state, onStateChange }: AvatarFram
   const [paneContextMenu, setPaneContextMenu] = useState<{ x: number; y: number } | null>(null)
   const [creatorNav, setCreatorNav] = useState<'avatar' | 'honor' | 'action' | 'ui' | 'icon'>('avatar')
 
+  // === 历史记录功能 ===
+  const [history, setHistory] = useState<HistoryEntry[]>(() => loadHistory())
+  const [showHistoryPanel, setShowHistoryPanel] = useState(false)
+  const [saveName, setSaveName] = useState('')
+  const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const lastStateRef = useRef<string>('')
+
   const setFlowState = useCallback((updater: (prev: FlowState) => FlowState) => {
     onStateChange(updater)
   }, [onStateChange])
+
+  // 手动保存
+  const handleManualSave = useCallback(() => {
+    const name = saveName.trim() || `版本 ${history.length + 1}`
+    const entry = addHistoryEntry(state as Record<string, unknown>, name, false)
+    const newHistory = [...history, entry]
+    setHistory(newHistory)
+    saveHistory(newHistory)
+    setSaveName('')
+    setAutoSaveStatus('saved')
+    setTimeout(() => setAutoSaveStatus('idle'), 2000)
+  }, [state, history, saveName])
+
+  // 自动保存（防抖）
+  useEffect(() => {
+    const stateKey = JSON.stringify({
+      shape: state.shape,
+      quadrants: state.quadrants,
+      aiPrompt: state.aiPrompt,
+      colorTheme: state.colorTheme?.raw,
+      similarKeywords: state.similarKeywords,
+    })
+    
+    // 状态没变化则跳过
+    if (stateKey === lastStateRef.current) return
+    lastStateRef.current = stateKey
+
+    // 清除之前的定时器
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current)
+    }
+
+    // 设置新的防抖定时器
+    autoSaveTimerRef.current = setTimeout(() => {
+      setAutoSaveStatus('saving')
+      const entry = addHistoryEntry(state as Record<string, unknown>, '自动保存', true)
+      // 只保留最近一个自动保存，避免重复
+      const filtered = history.filter(e => !e.auto)
+      const newHistory = [...filtered, entry]
+      setHistory(newHistory)
+      saveHistory(newHistory)
+      setAutoSaveStatus('saved')
+      setTimeout(() => setAutoSaveStatus('idle'), 1500)
+    }, getAutoSaveInterval())
+
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current)
+      }
+    }
+  }, [state])
+
+  // 恢复历史版本
+  const handleRestore = useCallback((entry: HistoryEntry) => {
+    const restored = entry.state as FlowState
+    // 恢复时需要补上缺失的默认值（因为轻量版可能省略了某些字段）
+    const empty = createEmptyAvatarFrameFlowState()
+    const merged: FlowState = {
+      ...empty,
+      ...restored,
+      // 确保数值在合理范围内
+      referenceSimilarity: Math.min(100, Math.max(0, restored.referenceSimilarity ?? empty.referenceSimilarity)),
+      generateImageVariantCount: restored.generateImageVariantCount === 3 ? 3 : 1,
+      timiImageSize: (restored.timiImageSize === '2K' ? '2K' : '1K') as '1K' | '2K',
+    }
+    onStateChange(() => merged)
+    setShowHistoryPanel(false)
+  }, [onStateChange])
+
+  // 删除历史条目
+  const handleDeleteEntry = useCallback((id: string) => {
+    const newHistory = deleteHistoryEntry(history, id)
+    setHistory(newHistory)
+    saveHistory(newHistory)
+  }, [history])
+
+  // 清空历史
+  const handleClearHistory = useCallback(() => {
+    if (confirm('确定要清空所有历史记录吗？')) {
+      setHistory([])
+      clearHistory()
+    }
+  }, [])
 
   const closePaneContextMenu = useCallback(() => setPaneContextMenu(null), [])
 
@@ -1659,6 +1760,99 @@ export default function AvatarFrameDesigner({ state, onStateChange }: AvatarFram
               </div>
             </button>
           ))}
+        </div>
+
+        {/* === 历史记录区域 === */}
+        <div className="border-t border-slate-800/60 pt-3 pb-2">
+          {/* 自动保存状态指示 */}
+          <div className="mx-1.5 mb-2 flex items-center justify-between">
+            <span className="text-[10px] text-slate-500">
+              {autoSaveStatus === 'saving' ? '⏳ 保存中...' : 
+               autoSaveStatus === 'saved' ? '✓ 已保存' : '自动保存'}
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowHistoryPanel(!showHistoryPanel)}
+              className="text-[10px] text-indigo-400 hover:text-indigo-300 transition"
+            >
+              {showHistoryPanel ? '收起' : '历史'}
+            </button>
+          </div>
+
+          {/* 手动保存输入 */}
+          <div className="mx-1.5 mb-2">
+            <div className="flex gap-1">
+              <input
+                type="text"
+                placeholder="版本名称..."
+                value={saveName}
+                onChange={e => setSaveName(e.target.value)}
+                className="flex-1 min-w-0 bg-slate-900/60 border border-slate-800/50 rounded-lg px-2 py-1.5 text-[11px] text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-indigo-500/50"
+                onKeyDown={e => {
+                  if (e.key === 'Enter') handleManualSave()
+                }}
+              />
+              <button
+                type="button"
+                onClick={handleManualSave}
+                className="shrink-0 bg-indigo-500/20 border border-indigo-500/30 rounded-lg px-2 py-1.5 text-[11px] text-indigo-300 hover:bg-indigo-500/30 transition"
+              >
+                保存
+              </button>
+            </div>
+          </div>
+
+          {/* 历史记录列表 */}
+          {showHistoryPanel && history.length > 0 && (
+            <div className="mx-1.5 max-h-[180px] overflow-y-auto space-y-1">
+              {history.slice().reverse().map(entry => (
+                <div
+                  key={entry.id}
+                  className="group flex items-center gap-2 rounded-lg bg-slate-900/40 border border-slate-800/40 px-2 py-1.5 hover:border-slate-700/60 transition"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="truncate text-[11px] text-slate-200">
+                      {entry.name}
+                      {entry.auto && <span className="ml-1 text-[9px] text-slate-500">(自动)</span>}
+                    </div>
+                    <div className="text-[9px] text-slate-500">{formatTimestamp(entry.timestamp)}</div>
+                  </div>
+                  <div className="shrink-0 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
+                    <button
+                      type="button"
+                      onClick={() => handleRestore(entry)}
+                      className="text-[10px] text-indigo-400 hover:text-indigo-300"
+                      title="恢复此版本"
+                    >
+                      恢复
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteEntry(entry.id)}
+                      className="text-[10px] text-red-400 hover:text-red-300"
+                      title="删除"
+                    >
+                      删
+                    </button>
+                  </div>
+                </div>
+              ))}
+              {history.length > 1 && (
+                <button
+                  type="button"
+                  onClick={handleClearHistory}
+                  className="w-full text-[10px] text-red-400/70 hover:text-red-400 py-1 text-center"
+                >
+                  清空历史
+                </button>
+              )}
+            </div>
+          )}
+          {showHistoryPanel && history.length === 0 && (
+            <div className="mx-1.5 text-[10px] text-slate-500 text-center py-2">
+              暂无历史记录
+            </div>
+          )}
         </div>
       </div>
 

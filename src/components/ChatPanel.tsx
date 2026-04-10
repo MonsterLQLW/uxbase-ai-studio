@@ -117,12 +117,13 @@ export default function ChatPanel() {
         </div>
       )}
 
-      {/* 底部：模型 + 输入（与 Layout pb-10 留底边呼吸空间） */}
+      {/* 底部：模型选择器 + 输入区 */}
       <div className="flex flex-shrink-0 flex-col gap-3 border-t border-slate-800/90 pt-4">
         <div className="flex flex-wrap items-center gap-2">
           <button
+            type="button"
             onClick={() => setChatModel('gemini')}
-            className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+            className={`inline-flex h-9 min-w-[5.5rem] items-center justify-center rounded-lg px-3 text-xs font-medium transition ${
               chatModel === 'gemini'
                 ? 'bg-indigo-600 text-white'
                 : 'border border-slate-700 bg-slate-800 text-slate-400 hover:text-slate-200'
@@ -131,8 +132,9 @@ export default function ChatPanel() {
             ✨ Gemini
           </button>
           <button
+            type="button"
             onClick={() => setChatModel('timi')}
-            className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+            className={`inline-flex h-9 min-w-[5.5rem] items-center justify-center rounded-lg px-3 text-xs font-medium transition ${
               chatModel === 'timi'
                 ? 'bg-blue-600 text-white'
                 : 'border border-slate-700 bg-slate-800 text-slate-400 hover:text-slate-200'
@@ -142,8 +144,8 @@ export default function ChatPanel() {
           </button>
         </div>
 
-        {/* 底行：三列 grid + items-end，保证输入框与两侧按钮底边齐平 */}
-        <div className="grid w-full grid-cols-[3rem_1fr_3rem] items-end gap-2.5">
+        {/* 输入区：两侧按钮固定 48×48，与输入框底边对齐 */}
+        <div className="flex gap-2 items-end">
           <input
             type="file"
             ref={fileInputRef}
@@ -154,33 +156,36 @@ export default function ChatPanel() {
           />
           <label
             htmlFor="image-upload"
-            className="flex h-12 w-full cursor-pointer items-center justify-center rounded-xl border border-slate-700 bg-slate-800 transition hover:bg-slate-700"
+            className="flex h-12 w-12 shrink-0 cursor-pointer items-center justify-center rounded-xl border border-slate-700 bg-slate-800 transition hover:bg-slate-700"
             title="上传图片"
           >
             <ImageIcon size={20} className="text-slate-400" />
           </label>
 
-          <textarea
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            onKeyDown={e => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault()
-                send()
-              }
-            }}
-            rows={1}
-            className="min-h-12 w-full max-h-[7.5rem] resize-none rounded-xl border border-slate-700 bg-slate-800 px-3 py-2.5 text-sm leading-5 text-slate-200 placeholder:text-slate-500 box-border focus:border-indigo-500 focus:outline-none focus:ring-0"
-            placeholder={chatModel === 'timi' ? '问 TIMI AI...（支持上传图片）' : '问 Gemini...（支持上传图片）'}
-          />
+          {/* 与两侧 h-12 同高对齐：容器至少 48px，textarea 贴底避免"悬空" */}
+          <div className="flex min-h-12 min-w-0 flex-1 flex-col justify-end">
+            <textarea
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault()
+                  send()
+                }
+              }}
+              rows={1}
+              className="m-0 box-border min-h-12 w-full max-h-[120px] resize-none rounded-xl border border-slate-700 bg-slate-800 px-4 py-2.5 text-sm leading-5 text-slate-200 placeholder:text-slate-500 focus:border-indigo-500 focus:outline-none"
+              placeholder={chatModel === 'timi' ? '问 TIMI AI...（支持上传图片）' : '问 Gemini...（支持上传图片）'}
+            />
+          </div>
 
           <button
             type="button"
             onClick={send}
             disabled={loading}
-            className="flex h-12 w-full items-center justify-center rounded-xl bg-indigo-600 transition hover:bg-indigo-700 disabled:bg-indigo-800"
+            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-indigo-600 transition hover:bg-indigo-700 disabled:bg-indigo-800 disabled:opacity-70"
           >
-            <Send size={20} />
+            <Send size={20} className="text-white" />
           </button>
         </div>
       </div>

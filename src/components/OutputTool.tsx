@@ -665,11 +665,12 @@ const OT_INITIAL_EDGES: Edge[] = [
 /** 输出工具 Tab 定义 */
 type OutputToolTabId =
   | 'signature_gift'
+  | 'poke'
   | 'signature_peripheral'
   | 'button_bundle'
   | 'legend_broadcast'
   | 'honor_broadcast'
-  | 'upload_discount'
+  | 'mall_discount'
   | 'mall_gift_request'
 
 interface OutputToolTab {
@@ -678,15 +679,24 @@ interface OutputToolTab {
   built: boolean // 是否已搭建
 }
 
+/** 王者国内 · 个性资源模板 */
 const OUTPUT_TOOL_TABS: OutputToolTab[] = [
   { id: 'signature_gift', name: '签名·端外索赠图', built: true },
+  { id: 'poke', name: '戳戳·配套图', built: false },
   { id: 'signature_peripheral', name: '签名·周边图', built: false },
   { id: 'button_bundle', name: '按键·配套图', built: false },
   { id: 'legend_broadcast', name: '传说播报·配套图', built: false },
   { id: 'honor_broadcast', name: '荣耀播报·配套图', built: false },
-  { id: 'upload_discount', name: '上传·特惠图', built: false },
-  { id: 'mall_gift_request', name: '商城·索赠图', built: false },
 ]
+
+/** 王者国内 · 商城模板 */
+const OUTPUT_TOOL_MALL_TABS: OutputToolTab[] = [
+  { id: 'mall_discount', name: '特惠图', built: false },
+  { id: 'mall_gift_request', name: '索赠图', built: false },
+]
+
+const OUTPUT_TOOL_ASSET_TAB_IDS = new Set(OUTPUT_TOOL_TABS.map(t => t.id))
+const OUTPUT_TOOL_MALL_TAB_IDS = new Set(OUTPUT_TOOL_MALL_TABS.map(t => t.id))
 
 export default function OutputTool() {
   const [activeTab, setActiveTab] = useState<OutputToolTabId>('signature_gift')
@@ -1584,7 +1594,7 @@ export default function OutputTool() {
                   className="w-full rounded-lg border border-slate-800/50 bg-slate-950/20 px-3 py-2 pr-8 text-left text-[11px] font-medium text-slate-300 outline-none transition hover:border-slate-700/55 hover:bg-slate-950/25 focus:border-slate-700/70 focus:ring-1 focus:ring-indigo-500/10"
                   title="切换王者国内子集"
                 >
-                  {wzDomesticSection === 'assets' ? '个性资源' : '商城'}
+                  {wzDomesticSection === 'assets' ? '个性资源模板' : '商城模板'}
                 </button>
                 <div className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-300/80">
                   <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
@@ -1603,8 +1613,8 @@ export default function OutputTool() {
                   >
                     {(
                       [
-                        { id: 'assets' as const, label: '个性资源' },
-                        { id: 'mall' as const, label: '商城' },
+                        { id: 'assets' as const, label: '个性资源模板' },
+                        { id: 'mall' as const, label: '商城模板' },
                       ] as const
                     ).map(opt => {
                       const active = wzDomesticSection === opt.id
@@ -1615,6 +1625,15 @@ export default function OutputTool() {
                           onClick={() => {
                             setWzDomesticSection(opt.id)
                             setWzDomesticSectionOpen(false)
+                            if (opt.id === 'mall') {
+                              setActiveTab(cur =>
+                                OUTPUT_TOOL_MALL_TAB_IDS.has(cur) ? cur : 'mall_discount',
+                              )
+                            } else {
+                              setActiveTab(cur =>
+                                OUTPUT_TOOL_ASSET_TAB_IDS.has(cur) ? cur : 'signature_gift',
+                              )
+                            }
                           }}
                           className={`w-full px-3 py-2 text-left text-[11px] transition ${
                             active ? 'bg-indigo-500/12 text-indigo-200' : 'text-slate-200 hover:bg-slate-800/30'
@@ -1651,7 +1670,28 @@ export default function OutputTool() {
               </button>
             ))}
 
-          {/* 王者国内-商城：左侧不再重复提示，右侧画布区会显示“模板搭建中” */}
+          {templateChannel === 'wz-domestic' && wzDomesticSection === 'mall' &&
+            OUTPUT_TOOL_MALL_TABS.map(tab => (
+              <button
+                key={tab.id}
+                type="button"
+                disabled={!tab.built}
+                onClick={() => tab.built && setActiveTab(tab.id)}
+                className={`group relative mx-1.5 my-1 w-[calc(100%-12px)] rounded-xl px-2.5 py-2 text-left text-[13px] transition-colors duration-150 ${
+                  activeTab === tab.id
+                    ? 'bg-indigo-500/12 text-indigo-300'
+                    : tab.built
+                    ? 'text-slate-300 hover:bg-slate-800/25 hover:text-slate-100'
+                    : 'text-slate-500 cursor-not-allowed'
+                } ${!tab.built ? 'opacity-40' : ''}`}
+              >
+                <div className="min-w-0">
+                  <div className="truncate">{tab.name}</div>
+                </div>
+              </button>
+            ))}
+
+          {/* 王者国内-商城模板：右侧画布区会显示“模板搭建中” */}
         </div>
       </div>
 

@@ -1,0 +1,35 @@
+@import "tailwindcss";
+
+@theme {
+  --animate-aurora-1: aurora-1 6s ease-in-out infinite;
+  --animate-aurora-2: aurora-2 8s ease-in-out infinite;
+  --animate-aurora-3: aurora-3 10s ease-in-out infinite;
+}
+
+@keyframes aurora-1 {
+  0%, 100% { transform: translate(0, 0) scale(0.8) rotate(0deg); }
+  33%       { transform: translate(80%, 50%) scale(1.5) rotate(45deg); }
+  66%       { transform: translate(-20%, 80%) scale(0.6) rotate(-45deg); }
+}
+@keyframes aurora-2 {
+  0%, 100% { transform: translate(0, 0) scale(1) rotate(0deg); }
+  33%       { transform: translate(-80%, 60%) scale(0.7) rotate(-30deg); }
+  66%       { transform: translate(50%, -60%) scale(1.4) rotate(30deg); }
+}
+@keyframes aurora-3 {
+  0%, 100% { transform: translate(0, 0) scale(1.2) rotate(0deg); }
+  33%       { transform: translate(60%, -80%) scale(0.6) rotate(60deg); }
+  66%       { transform: translate(-60%, 40%) scale(1.5) rotate(-60deg); }
+}
+
+body {
+  background-color: #0f172a;
+  color: #e2e8f0;
+  margin: 0;
+  overflow: hidden;
+}
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #1e293b; }
+::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #64748b; }

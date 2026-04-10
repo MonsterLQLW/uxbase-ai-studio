@@ -59,6 +59,35 @@ let TIMI_API_KEY = ''
 let TIMI_API_URL = ''
 let TIMI_MODEL = 'gpt-5'
 
+/** TIMI 内网可达性探测超时（毫秒），超时则判定不在内网环境 */
+const TIMI_CHECK_TIMEOUT_MS = 3000
+
+/**
+ * 探测当前环境是否可以访问 TIMI 代理（/timi-proxy）
+ * - 在 Vercel 等生产环境：/timi-proxy 不存在，fetch 会 network error
+ * - 在公司内网且开了 npm run dev：timi-proxy 存在，请求正常发出
+ * 超时 3 秒则判定为不在内网环境
+ */
+async function checkIntranetAccess(): Promise<void> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), TIMI_CHECK_TIMEOUT_MS)
+  try {
+    await fetch('/timi-proxy', {
+      method: 'HEAD',
+      signal: controller.signal,
+    })
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err)
+    // AbortError = 超时，network error = 代理不存在
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new Error('TIMI 连接超时（3秒），请确保在内部网络环境下使用')
+    }
+    throw new Error(`无法连接到 TIMI 服务，请确保在内部网络环境下使用（错误: ${msg}）`)
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 export function setTIMIKey(key: string) {
   TIMI_API_KEY = key.trim()
 }
@@ -507,6 +536,9 @@ export async function chatWithTIMI(messages: ChatMessage[]): Promise<string> {
     return { role, content: m.text }
   })
 
+  // 内网可达性检测，不通则直接报错
+  await checkIntranetAccess()
+
   const resp = await fetch('/timi-proxy', {
     method: 'POST',
     headers: {
@@ -554,6 +586,9 @@ export async function generateSimilarReferenceAnalysisWithTIMI(options: { prompt
     if (!url) continue
     content.push({ type: 'image_url', image_url: { url } })
   }
+
+  // 内网可达性检测，不通则直接报错
+  await checkIntranetAccess()
 
   const resp = await fetch('/timi-proxy', {
     method: 'POST',
@@ -709,6 +744,9 @@ export async function generateImageWithTIMI({
   const baseDelayMs = 1200
   let lastText = ''
   let lastStatus = 0
+
+  // 内网可达性检测，不通则直接报错（避免重试3次后才报错，体验更好）
+  await checkIntranetAccess()
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     const resp = await fetch('/timi-proxy', {

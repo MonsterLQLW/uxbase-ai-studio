@@ -1,11 +1,18 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { chatWithGemini, chatWithTIMI, type ChatMessage } from '../services/gemini'
 import { Send, Image as ImageIcon, Loader, Sparkles } from 'lucide-react'
 import HomeStyleBackdrop from './HomeStyleBackdrop'
+import {
+  saveWorkspaceSnapshot,
+  clearWorkspaceSnapshot,
+  loadWorkspaceSnapshot,
+  tryConsumePendingWorkspaceNav,
+  type ChatSnapPayload,
+} from '../lib/homeWorkspaceSnapshots'
 
 type ChatModel = 'gemini' | 'timi'
 
-export default function ChatPanel() {
+export default function ChatPanel({ isActive }: { isActive: boolean }) {
   const [input, setInput] = useState('')
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [loading, setLoading] = useState(false)
@@ -13,6 +20,39 @@ export default function ChatPanel() {
   const [chatModel, setChatModel] = useState<ChatModel>('gemini')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!isActive) return
+    if (!tryConsumePendingWorkspaceNav('chat')) return
+    const snap = loadWorkspaceSnapshot('chat')
+    const p = snap?.payload as ChatSnapPayload | null
+    if (!p?.messages?.length) return
+    setMessages(p.messages as ChatMessage[])
+    setChatModel(p.chatModel === 'timi' ? 'timi' : 'gemini')
+  }, [isActive])
+
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      if (messages.length === 0) {
+        clearWorkspaceSnapshot('chat')
+        return
+      }
+      const firstImg = messages.find(m => m.imageData)?.imageData
+      const lastUser = [...messages].reverse().find(m => m.role === 'user')
+      const title = (lastUser?.text || '对话').trim().slice(0, 42) || `对话 · ${messages.length} 条`
+      const payload: ChatSnapPayload = { messages, chatModel }
+      saveWorkspaceSnapshot({
+        source: 'chat',
+        updatedAt: Date.now(),
+        title,
+        subtitle: `${messages.length} 条 · ${chatModel === 'timi' ? 'TIMI' : 'Gemini'}`,
+        thumbDataUrl: firstImg && firstImg.length < 120_000 ? firstImg : undefined,
+        payload,
+        hasWork: undefined,
+      })
+    }, 1000)
+    return () => clearTimeout(id)
+  }, [messages, chatModel])
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]

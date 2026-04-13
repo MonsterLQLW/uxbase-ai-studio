@@ -1,4 +1,13 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import {
+  saveWorkspaceSnapshot,
+  clearWorkspaceSnapshot,
+  loadWorkspaceSnapshot,
+  tryConsumePendingWorkspaceNav,
+  OUTPUT_TOOL_DEFAULT_POKE,
+  isOutputToolSnapPayloadMeaningful,
+  type OutputToolSnapPayload,
+} from '../lib/homeWorkspaceSnapshots'
 import JSZip from 'jszip'
 import ReactFlow, {
   Background,
@@ -15,7 +24,30 @@ import ReactFlow, {
 import 'reactflow/dist/style.css'
 import defaultLayer7Url from '../assets/output-tool-layer7.png'
 import { DEFAULT_OUTPUT_TOOL_TEMPLATE } from '../lib/outputToolTemplate'
+import {
+  drawOutputStyleBottomFadeMask,
+  MASK_UI_MAX_FALLOFF,
+  MASK_UI_MAX_OPACITY,
+  MASK_UI_MAX_REACH,
+  MASK_UI_MIN_FALLOFF,
+  MASK_UI_MIN_REACH,
+} from '../lib/outputStyleMask'
 import { generateSimilarReferenceAnalysisWithTIMI } from '../services/gemini'
+import {
+  PokeFlowContext,
+  POKE_ADD_OPTIONS,
+  POKE_EDGE_COLOR,
+  pokeFlowNodeTypes,
+  defaultPokeElementTemplate,
+  POKE_MASK_BUILTIN_LAYER,
+  type PokeElementTemplateState,
+  type PokeFlowCtx,
+  type PokeFlowNodeData,
+  type PokeRfNodeType,
+} from './OutputToolPokeFlow'
+import { PokeDeletableBezierEdge } from './OutputToolPokeEdge'
+import { RfRangeInput } from './RfRangeInput'
+import StageDualFlow from './stageDual/StageDualFlow'
 
 type DataUrlImage = { dataUrl: string; name: string }
 
@@ -237,7 +269,7 @@ type OutputNodeData = {
   ctx?: OutputToolFlowCtx
 }
 
-function OtShell({ title, children, className = '' }: { title: string; children: React.ReactNode; className?: string }) {
+function OtShell({ title, children, className = '' }: { title: string; children: ReactNode; className?: string }) {
   return (
     <div
       className={`min-w-[300px] rounded-xl border border-slate-800/42 bg-gradient-to-b from-slate-900/76 to-slate-900/86 shadow-lg shadow-black/25 ${className}`}
@@ -393,14 +425,13 @@ function OtTemplateBlueNode({ data }: NodeProps<OutputNodeData>) {
           <span>宽度</span>
           <span className="text-slate-300 tabular-nums">{ctx.glowSize}</span>
         </div>
-        <input
-          type="range"
+        <RfRangeInput
           min={0}
           max={40}
           step={1}
           value={ctx.glowSize}
           onChange={e => ctx.setGlowSize(Number(e.target.value))}
-          className="w-full h-1.5 accent-indigo-500 cursor-pointer"
+          className="w-full h-1.5 accent-indigo-500"
         />
       </div>
       <div className="mt-2">
@@ -408,14 +439,13 @@ function OtTemplateBlueNode({ data }: NodeProps<OutputNodeData>) {
           <span>透明度</span>
           <span className="text-slate-300 tabular-nums">{Math.round(ctx.glowOpacity * 100)}</span>
         </div>
-        <input
-          type="range"
+        <RfRangeInput
           min={0}
           max={1}
           step={0.01}
           value={ctx.glowOpacity}
           onChange={e => ctx.setGlowOpacity(Number(e.target.value))}
-          className="w-full h-1.5 accent-indigo-500 cursor-pointer"
+          className="w-full h-1.5 accent-indigo-500"
         />
       </div>
       <div className="mt-3 grid grid-cols-2 gap-2">
@@ -441,14 +471,13 @@ function OtTemplateBlueNode({ data }: NodeProps<OutputNodeData>) {
           <span>右下角边距</span>
           <span className="text-slate-300 tabular-nums">{ctx.logoMargin}px</span>
         </div>
-        <input
-          type="range"
+        <RfRangeInput
           min={0}
           max={24}
           step={1}
           value={ctx.logoMargin}
           onChange={e => ctx.setLogoMargin(Number(e.target.value))}
-          className="w-full h-1.5 accent-indigo-500 cursor-pointer"
+          className="w-full h-1.5 accent-indigo-500"
         />
       </div>
     </OtShell>
@@ -595,6 +624,7 @@ function OtOutputNode({ data }: NodeProps<OutputNodeData>) {
   )
 }
 
+
 /**
  * 输出工具 · 画布默认间距模板（首次打开 = 平均视图基准）
  * 参考截图：列与列之间留白约 60–80px；上下两路之间约 40–50px；上传/输出相对双路垂直居中。
@@ -668,6 +698,7 @@ const OT_INITIAL_EDGES: Edge[] = [
 type OutputToolTabId =
   | 'signature_gift'
   | 'poke'
+  | 'stage_dual'
   | 'signature_peripheral'
   | 'button_bundle'
   | 'legend_broadcast'
@@ -684,7 +715,8 @@ interface OutputToolTab {
 /** 王者国内 · 个性资源模板 */
 const OUTPUT_TOOL_TABS: OutputToolTab[] = [
   { id: 'signature_gift', name: '签名·端外索赠图', built: true },
-  { id: 'poke', name: '戳戳·配套图', built: false },
+  { id: 'poke', name: '戳戳·配套图', built: true },
+  { id: 'stage_dual', name: '模板搭建', built: true },
   { id: 'signature_peripheral', name: '签名·周边图', built: false },
   { id: 'button_bundle', name: '按键·配套图', built: false },
   { id: 'legend_broadcast', name: '传说播报·配套图', built: false },
@@ -760,6 +792,34 @@ export default function OutputTool() {
   /** 导出文件名（不含扩展名） */
   const [blueFileName, setBlueFileName] = useState('output-blue')
   const [purpleFileName, setPurpleFileName] = useState('output-purple')
+
+  // ── 戳戳配套图状态 ───────────────────────────────────────────────────────
+  const [pokeBgColor, setPokeBgColor] = useState('#1a1a2e')
+  const [pokeText1, setPokeText1] = useState('')
+  const [pokeText2, setPokeText2] = useState('')
+
+  useEffect(() => {
+    setPokeText1(t => (t === '戳戳' ? '' : t))
+    setPokeText2(t => (t === '快乐时刻' ? '' : t))
+  }, [])
+  const [pokeFontSize, setPokeFontSize] = useState(36)
+  const [pokeFontColor, setPokeFontColor] = useState('#ffffff')
+  const [pokeMultiSizeDraft, setPokeMultiSizeDraft] = useState('1080×1080\n750×1334\n512×512')
+  const [pokeMaskColor, setPokeMaskColor] = useState('#000000')
+  const [pokeMaskOpacity, setPokeMaskOpacity] = useState(0)
+  const [pokeMaskLayer, setPokeMaskLayer] = useState<DataUrlImage>(() => ({ ...POKE_MASK_BUILTIN_LAYER }))
+  const [pokeMaskReach, setPokeMaskReach] = useState(0.76)
+  const [pokeMaskFalloff, setPokeMaskFalloff] = useState(1)
+  const [pokeOutputW, setPokeOutputW] = useState(400)
+  const [pokeOutputH, setPokeOutputH] = useState(400)
+  const [pokeNodes, setPokeNodes, onPokeNodesChange] = useNodesState<PokeFlowNodeData>([])
+  const [pokeEdges, setPokeEdges, onPokeEdgesChange] = useEdgesState<Edge>([])
+  const [pokeNodeCtxMenu, setPokeNodeCtxMenu] = useState<{
+    x: number
+    y: number
+    nodeId: string
+  } | null>(null)
+  const previewCanvasPokeRef = useRef<HTMLCanvasElement | null>(null)
   /** 与异步 render 解耦：人物自然尺寸在图片加载后即可用于滚轮缩放（charMetaRef 仅在后端 render 成功后才写入，容易一直为 null） */
   const [charNaturalSize, setCharNaturalSize] = useState<{ iw: number; ih: number } | null>(null)
   const [debugCharRect, setDebugCharRect] = useState<null | { x: number; y: number; w: number; h: number }>(null)
@@ -800,6 +860,88 @@ export default function OutputTool() {
       cancelled = true
     }
   }, [character?.dataUrl, getCachedImage])
+
+  useLayoutEffect(() => {
+    const pending = tryConsumePendingWorkspaceNav('output-tool')
+    const snap = loadWorkspaceSnapshot('output-tool')
+    const p = snap?.payload as OutputToolSnapPayload | null
+    if (!p || typeof p !== 'object') return
+    if (!pending && !isOutputToolSnapPayloadMeaningful(p)) return
+    setActiveTab((p.activeTab as OutputToolTabId) || 'signature_gift')
+    setTemplateChannel(p.templateChannel === 'wz-camp' ? 'wz-camp' : 'wz-domestic')
+    setWzDomesticSection(p.wzDomesticSection === 'mall' ? 'mall' : 'assets')
+    setCharacter(p.character)
+    setLogo(p.logo)
+    setLayer7(p.layer7 || { dataUrl: defaultLayer7Url, name: '内置素材（7号）' })
+    setLayer7TintBlue(p.layer7TintBlue ?? DEFAULT_OUTPUT_TOOL_TEMPLATE.layer7.tint)
+    setLayer7TintPurple(p.layer7TintPurple ?? DEFAULT_OUTPUT_TOOL_TEMPLATE.layer7.tintPurple)
+    setLogoW(p.logoW ?? DEFAULT_OUTPUT_TOOL_TEMPLATE.logo.width)
+    setLogoH(p.logoH ?? DEFAULT_OUTPUT_TOOL_TEMPLATE.logo.height)
+    setLogoMargin(p.logoMargin ?? DEFAULT_OUTPUT_TOOL_TEMPLATE.logo.margin)
+    setGlowEnabled(p.glowEnabled ?? DEFAULT_OUTPUT_TOOL_TEMPLATE.logo.glow.enabled)
+    setGlowColor(p.glowColor ?? DEFAULT_OUTPUT_TOOL_TEMPLATE.logo.glow.color)
+    setGlowSize(p.glowSize ?? DEFAULT_OUTPUT_TOOL_TEMPLATE.logo.glow.size)
+    setGlowOpacity(p.glowOpacity ?? DEFAULT_OUTPUT_TOOL_TEMPLATE.logo.glow.opacity)
+    setCharScale(p.charScale ?? DEFAULT_OUTPUT_TOOL_TEMPLATE.character.scale)
+    setCharOffsetX(p.charOffsetX ?? DEFAULT_OUTPUT_TOOL_TEMPLATE.character.offsetX)
+    setCharOffsetY(p.charOffsetY ?? DEFAULT_OUTPUT_TOOL_TEMPLATE.character.offsetY)
+    setBlueFileName(p.blueFileName || 'output-blue')
+    setPurpleFileName(p.purpleFileName || 'output-purple')
+    if (typeof p.pokeOutputW === 'number' && p.pokeOutputW >= 32 && p.pokeOutputW <= 4096) {
+      setPokeOutputW(Math.round(p.pokeOutputW))
+    }
+    if (typeof p.pokeOutputH === 'number' && p.pokeOutputH >= 32 && p.pokeOutputH <= 4096) {
+      setPokeOutputH(Math.round(p.pokeOutputH))
+    }
+    if (typeof p.pokeBgColor === 'string' && p.pokeBgColor) setPokeBgColor(p.pokeBgColor)
+    if (typeof p.pokeText1 === 'string') {
+      setPokeText1(p.pokeText1 === '戳戳' ? '' : p.pokeText1)
+    }
+    if (typeof p.pokeText2 === 'string') {
+      setPokeText2(p.pokeText2 === '快乐时刻' ? '' : p.pokeText2)
+    }
+    if (typeof p.pokeFontSize === 'number' && p.pokeFontSize >= 8 && p.pokeFontSize <= 200) {
+      setPokeFontSize(Math.round(p.pokeFontSize))
+    }
+    if (typeof p.pokeFontColor === 'string' && p.pokeFontColor) setPokeFontColor(p.pokeFontColor)
+    if (typeof p.pokeMultiSizeDraft === 'string') setPokeMultiSizeDraft(p.pokeMultiSizeDraft)
+    if (typeof p.pokeMaskColor === 'string' && p.pokeMaskColor) setPokeMaskColor(p.pokeMaskColor)
+    if (p.pokeMaskLayer?.dataUrl) {
+      setPokeMaskLayer({
+        dataUrl: p.pokeMaskLayer.dataUrl,
+        name: typeof p.pokeMaskLayer.name === 'string' ? p.pokeMaskLayer.name : '遮罩底图',
+      })
+    }
+    let nextOp =
+      typeof p.pokeMaskOpacity === 'number' && !Number.isNaN(p.pokeMaskOpacity) ? p.pokeMaskOpacity : 0
+    let nextReach =
+      typeof p.pokeMaskReach === 'number' && !Number.isNaN(p.pokeMaskReach) ? p.pokeMaskReach : 0.76
+    let nextFall =
+      typeof p.pokeMaskFalloff === 'number' && !Number.isNaN(p.pokeMaskFalloff) ? p.pokeMaskFalloff : 1
+    if (!p.pokeMaskSliderRangeV2) {
+      if (nextReach <= 1.0001) nextReach *= 2
+      if (nextOp > 0 && nextOp <= 1.0001) nextOp *= 2
+    }
+    setPokeMaskOpacity(clamp(nextOp, 0, MASK_UI_MAX_OPACITY))
+    setPokeMaskReach(clamp(nextReach, MASK_UI_MIN_REACH, MASK_UI_MAX_REACH))
+    setPokeMaskFalloff(clamp(nextFall, MASK_UI_MIN_FALLOFF, MASK_UI_MAX_FALLOFF))
+    if (Array.isArray(p.pokeNodes) && p.pokeNodes.length > 0) {
+      setPokeNodes(p.pokeNodes as Node<PokeFlowNodeData>[])
+      if (Array.isArray(p.pokeEdges)) setPokeEdges(p.pokeEdges as Edge[])
+    } else if (p.pokeElementLayer?.dataUrl) {
+      setPokeNodes([
+        {
+          id: `poke-el-mig-${Date.now()}`,
+          type: 'otPokeElement',
+          position: { x: 120, y: 220 },
+          data: {
+            title: '元素模板',
+            elementTemplate: { ...defaultPokeElementTemplate(), layer: p.pokeElementLayer },
+          },
+        },
+      ])
+    }
+  }, [])
 
   const offscreenPreviewRef = useRef<HTMLCanvasElement | null>(null)
   const offscreenOutRef = useRef<HTMLCanvasElement | null>(null)
@@ -937,6 +1079,133 @@ export default function OutputTool() {
       logoW,
     ],
   )
+
+  const persistOutputWorkspaceRef = useRef<() => void>(() => {})
+  persistOutputWorkspaceRef.current = () => {
+    const pokeTouched =
+      pokeBgColor !== OUTPUT_TOOL_DEFAULT_POKE.bg ||
+      pokeText1 !== OUTPUT_TOOL_DEFAULT_POKE.text1 ||
+      pokeText2 !== OUTPUT_TOOL_DEFAULT_POKE.text2 ||
+      pokeMultiSizeDraft.trim() !== OUTPUT_TOOL_DEFAULT_POKE.draft ||
+      pokeOutputW !== OUTPUT_TOOL_DEFAULT_POKE.outW ||
+      pokeOutputH !== OUTPUT_TOOL_DEFAULT_POKE.outH ||
+      pokeMaskOpacity > 0.001 ||
+      pokeMaskReach !== 0.76 ||
+      pokeMaskFalloff !== 1 ||
+      pokeMaskLayer.dataUrl !== POKE_MASK_BUILTIN_LAYER.dataUrl
+    const hasPokeElement = pokeNodes.some(
+      n => n.type === 'otPokeElement' && !!n.data.elementTemplate?.layer?.dataUrl,
+    )
+    const hasWork = !!(character?.dataUrl || logo?.dataUrl || hasPokeElement) || pokeTouched
+    if (!hasWork) {
+      clearWorkspaceSnapshot('output-tool')
+      return
+    }
+    const payload: OutputToolSnapPayload = {
+      activeTab,
+      templateChannel,
+      wzDomesticSection,
+      character,
+      logo,
+      layer7,
+      layer7TintBlue,
+      layer7TintPurple,
+      logoW,
+      logoH,
+      logoMargin,
+      glowEnabled,
+      glowColor,
+      glowSize,
+      glowOpacity,
+      charScale,
+      charOffsetX,
+      charOffsetY,
+      blueFileName,
+      purpleFileName,
+      pokeOutputW,
+      pokeOutputH,
+      pokeBgColor,
+      pokeText1,
+      pokeText2,
+      pokeFontSize,
+      pokeFontColor,
+      pokeMultiSizeDraft,
+      pokeMaskColor,
+      pokeMaskOpacity,
+      pokeMaskLayer,
+      pokeMaskReach,
+      pokeMaskFalloff,
+      pokeMaskSliderRangeV2: true,
+      pokeNodes,
+      pokeEdges,
+    }
+    const firstElUrl = pokeNodes.find(
+      n => n.type === 'otPokeElement' && n.data.elementTemplate?.layer?.dataUrl,
+    )?.data.elementTemplate?.layer?.dataUrl
+    const thumb = character?.dataUrl || logo?.dataUrl || firstElUrl
+    const tabName =
+      [...OUTPUT_TOOL_TABS, ...OUTPUT_TOOL_MALL_TABS].find((t) => t.id === activeTab)?.name || '输出工具'
+    saveWorkspaceSnapshot({
+      source: 'output-tool',
+      updatedAt: Date.now(),
+      title: '输出工具',
+      subtitle: tabName,
+      thumbDataUrl: thumb && thumb.length < 120_000 ? thumb : undefined,
+      payload,
+      hasWork: true,
+    })
+  }
+
+  useEffect(() => {
+    const id = window.setTimeout(() => persistOutputWorkspaceRef.current(), 400)
+    return () => clearTimeout(id)
+  }, [
+    activeTab,
+    templateChannel,
+    wzDomesticSection,
+    character,
+    logo,
+    layer7,
+    layer7TintBlue,
+    layer7TintPurple,
+    logoW,
+    logoH,
+    logoMargin,
+    glowEnabled,
+    glowColor,
+    glowSize,
+    glowOpacity,
+    charScale,
+    charOffsetX,
+    charOffsetY,
+    blueFileName,
+    purpleFileName,
+    pokeOutputW,
+    pokeOutputH,
+    pokeBgColor,
+    pokeText1,
+    pokeText2,
+    pokeFontSize,
+    pokeFontColor,
+    pokeMultiSizeDraft,
+    pokeMaskColor,
+    pokeMaskOpacity,
+    pokeMaskLayer,
+    pokeMaskReach,
+    pokeMaskFalloff,
+    pokeNodes,
+    pokeEdges,
+  ])
+
+  useEffect(() => {
+    const flush = () => persistOutputWorkspaceRef.current()
+    window.addEventListener('pagehide', flush)
+    window.addEventListener('beforeunload', flush)
+    return () => {
+      window.removeEventListener('pagehide', flush)
+      window.removeEventListener('beforeunload', flush)
+    }
+  }, [])
 
   // live preview（蓝 / 紫 双画布）
   useEffect(() => {
@@ -1110,6 +1379,257 @@ export default function OutputTool() {
     a.click()
   }, [render, layer7TintPurple, purpleFileName])
 
+  // ── 戳戳配套图渲染 ───────────────────────────────────────────────────────
+  const pokeOffscreenRef = useRef<HTMLCanvasElement | null>(null)
+  const pokeMaskComposeRef = useRef<HTMLCanvasElement | null>(null)
+  const pokeMaskMatteRef = useRef<HTMLCanvasElement | null>(null)
+  const pokeMaskTintCanvasRef = useRef<HTMLCanvasElement | null>(null)
+
+  const renderPoke = useCallback(
+    async (cw: number, ch: number, target?: HTMLCanvasElement) => {
+      const w = Math.max(1, Math.round(cw))
+      const h = Math.max(1, Math.round(ch))
+      const off = pokeOffscreenRef.current || (pokeOffscreenRef.current = document.createElement('canvas'))
+      if (off.width !== w) off.width = w
+      if (off.height !== h) off.height = h
+      const octx = off.getContext('2d')
+      if (!octx) return off
+
+      octx.fillStyle = pokeBgColor
+      octx.fillRect(0, 0, w, h)
+
+      const charImg = character?.dataUrl
+        ? await getCachedImage(character.dataUrl).catch(() => null)
+        : null
+      if (charImg) {
+        const iw = charImg.naturalWidth || charImg.width
+        const ih = charImg.naturalHeight || charImg.height
+        const base = Math.max(w / iw, h / ih)
+        const s = charScale
+        const drawW = iw * base * s
+        const drawH = ih * base * s
+        const x = (w - drawW) / 2 + (charOffsetX / PREVIEW) * w
+        const y = (h - drawH) / 2 + (charOffsetY / PREVIEW) * h
+        octx.drawImage(charImg, x, y, drawW, drawH)
+      }
+
+      for (const n of pokeNodes) {
+        if (n.type !== 'otPokeElement') continue
+        const tmpl = n.data.elementTemplate ?? defaultPokeElementTemplate()
+        if (!tmpl.layer?.dataUrl) continue
+        const elImg = await getCachedImage(tmpl.layer.dataUrl).catch(() => null)
+        if (!elImg) continue
+        const ew = elImg.naturalWidth || elImg.width
+        const eh = elImg.naturalHeight || elImg.height
+        const eb = Math.max(w / ew, h / eh) * 0.88 * tmpl.scale
+        const edw = ew * eb
+        const edh = eh * eb
+        const ex = (w - edw) / 2 + (tmpl.offsetX / PREVIEW) * w
+        const ey = (h - edh) / 2 + (tmpl.offsetY / PREVIEW) * h
+        drawLogoWithGlow(
+          octx,
+          elImg,
+          { x: ex, y: ey, w: edw, h: edh },
+          {
+            enabled: tmpl.glow.enabled,
+            color: tmpl.glow.color,
+            size: tmpl.glow.size,
+            opacity: tmpl.glow.opacity,
+          },
+        )
+      }
+
+      if (pokeText1.trim()) {
+        octx.save()
+        octx.font = `${pokeFontSize}px sans-serif`
+        octx.fillStyle = pokeFontColor
+        octx.textAlign = 'center'
+        octx.textBaseline = 'middle'
+        octx.fillText(pokeText1, w / 2, h - pokeFontSize * 1.8)
+        octx.restore()
+      }
+
+      if (pokeText2.trim()) {
+        octx.save()
+        octx.font = `${Math.round(pokeFontSize * 0.65)}px sans-serif`
+        octx.fillStyle = pokeFontColor
+        octx.globalAlpha = 0.7
+        octx.textAlign = 'center'
+        octx.textBaseline = 'middle'
+        octx.fillText(pokeText2, w / 2, h - pokeFontSize * 0.8)
+        octx.restore()
+      }
+
+      if (pokeMaskOpacity > 0.001) {
+        const compose = pokeMaskComposeRef.current || (pokeMaskComposeRef.current = document.createElement('canvas'))
+        const matte = pokeMaskMatteRef.current || (pokeMaskMatteRef.current = document.createElement('canvas'))
+        const tc = pokeMaskTintCanvasRef.current || (pokeMaskTintCanvasRef.current = document.createElement('canvas'))
+        await drawOutputStyleBottomFadeMask(
+          octx,
+          w,
+          h,
+          getCachedImage,
+          {
+            maskLayer: pokeMaskLayer,
+            tint: pokeMaskColor,
+            opacity: pokeMaskOpacity,
+            reach: pokeMaskReach,
+            falloff: pokeMaskFalloff,
+          },
+          { compose, matte, tint: tc },
+        )
+      }
+
+      if (target) {
+        const ctx2d = target.getContext('2d')
+        if (ctx2d) {
+          if (target.width !== w) target.width = w
+          if (target.height !== h) target.height = h
+          ctx2d.clearRect(0, 0, w, h)
+          ctx2d.drawImage(off, 0, 0)
+        }
+        return target
+      }
+      return off
+    },
+    [
+      pokeBgColor,
+      character?.dataUrl,
+      charScale,
+      charOffsetX,
+      charOffsetY,
+      pokeText1,
+      pokeText2,
+      pokeFontSize,
+      pokeFontColor,
+      pokeNodes,
+      pokeMaskColor,
+      pokeMaskOpacity,
+      pokeMaskLayer?.dataUrl,
+      pokeMaskReach,
+      pokeMaskFalloff,
+      getCachedImage,
+    ],
+  )
+
+  // ── 戳戳配套图实时预览（须在 renderPoke 定义之后）────────────────────────
+  const pokeRaffRef = useRef<number | null>(null)
+  const pokeInFlightRef = useRef(false)
+  const pokePendingRef = useRef(false)
+
+  useEffect(() => {
+    if (activeTab !== 'poke') return
+    let cancelled = false
+    let attachRaf = 0
+    let attachAttempts = 0
+    const MAX_ATTACH_FRAMES = 90
+
+    const cleanupRenders = () => {
+      if (pokeRaffRef.current != null) cancelAnimationFrame(pokeRaffRef.current)
+      pokeRaffRef.current = null
+      pokePendingRef.current = false
+    }
+
+    const startPreviewLoop = (canvas: HTMLCanvasElement) => {
+      const schedule = () => {
+        if (cancelled || pokeRaffRef.current != null) return
+        pokeRaffRef.current = requestAnimationFrame(() => {
+          pokeRaffRef.current = null
+          if (cancelled) return
+          if (pokeInFlightRef.current) {
+            pokePendingRef.current = true
+            return
+          }
+          pokeInFlightRef.current = true
+          void renderPoke(pokeOutputW, pokeOutputH, canvas).catch(() => {/* ignore */}).finally(() => {
+            pokeInFlightRef.current = false
+            if (pokePendingRef.current) {
+              pokePendingRef.current = false
+              schedule()
+            }
+          })
+        })
+      }
+      schedule()
+    }
+
+    const waitForCanvas = () => {
+      if (cancelled) return
+      const canvas = previewCanvasPokeRef.current
+      if (canvas) {
+        attachRaf = 0
+        startPreviewLoop(canvas)
+        return
+      }
+      attachAttempts += 1
+      if (attachAttempts > MAX_ATTACH_FRAMES) return
+      attachRaf = requestAnimationFrame(waitForCanvas)
+    }
+
+    attachRaf = requestAnimationFrame(waitForCanvas)
+
+    return () => {
+      cancelled = true
+      if (attachRaf !== 0) cancelAnimationFrame(attachRaf)
+      cleanupRenders()
+    }
+  }, [
+    activeTab,
+    renderPoke,
+    pokeOutputW,
+    pokeOutputH,
+    pokeBgColor,
+    character?.dataUrl,
+    charScale,
+    charOffsetX,
+    charOffsetY,
+    pokeText1,
+    pokeText2,
+    pokeFontSize,
+    pokeFontColor,
+    pokeNodes,
+    pokeMaskColor,
+    pokeMaskOpacity,
+    pokeMaskLayer?.dataUrl,
+    pokeMaskReach,
+    pokeMaskFalloff,
+  ])
+
+  /** 戳戳配套图导出 */
+  const exportPoke = useCallback(async () => {
+    const canvas = await renderPoke(pokeOutputW, pokeOutputH, undefined)
+    const url = (canvas as HTMLCanvasElement).toDataURL('image/png')
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `poke-output-${pokeOutputW}x${pokeOutputH}.png`
+    a.click()
+  }, [renderPoke, pokeOutputW, pokeOutputH])
+
+  /** 戳戳画布拖拽 */
+  const onPointerDownPoke = useCallback((e: React.PointerEvent) => {
+    setDragging(true)
+    const rect = (e.currentTarget as HTMLCanvasElement).getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const y = e.clientY - rect.top
+    dragRef.current = { sx: x, sy: y, ox: charOffsetX, oy: charOffsetY }
+  }, [charOffsetX, charOffsetY])
+
+  const onPointerMovePoke = useCallback((e: React.PointerEvent) => {
+    if (!dragging || !dragRef.current) return
+    const rect = (e.currentTarget as HTMLCanvasElement).getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const y = e.clientY - rect.top
+    const dx = x - dragRef.current.sx
+    const dy = y - dragRef.current.sy
+    setCharOffsetX(clamp(dragRef.current.ox + dx, -260, 260))
+    setCharOffsetY(clamp(dragRef.current.oy + dy, -260, 260))
+  }, [dragging])
+
+  const onPointerUpPoke = useCallback(() => {
+    setDragging(false)
+    dragRef.current = null
+  }, [])
+
   const onPointerDown = useCallback((e: React.PointerEvent) => {
     setDragging(true)
     const rect = (e.currentTarget as HTMLCanvasElement).getBoundingClientRect()
@@ -1185,6 +1705,69 @@ export default function OutputTool() {
     setCharOffsetY(Math.max(-260, Math.min(260, newOffY)))
   }, [character, charScale, charOffsetX, charOffsetY])
 
+  const onWheelPoke = useCallback(
+    (e: React.WheelEvent<HTMLCanvasElement>) => {
+      if (!character?.dataUrl) return
+      e.preventDefault()
+      e.stopPropagation()
+      const delta = e.deltaY !== 0 ? e.deltaY : e.deltaX
+      if (delta === 0) return
+      const canvas = e.currentTarget
+      const rect = canvas.getBoundingClientRect()
+      const meta = charNaturalSize ?? charMetaRef.current
+      if (!meta) return
+      const w = pokeOutputW
+      const h = pokeOutputH
+      const sx = w / rect.width
+      const sy = h / rect.height
+      const px = (e.clientX - rect.left) * sx
+      const py = (e.clientY - rect.top) * sy
+      const { iw, ih } = meta
+      const base = Math.max(w / iw, h / ih)
+      const baseW = iw * base
+      const baseH = ih * base
+      const s0 = charScale
+      const zoomStep = 1.08
+      const factor = delta < 0 ? zoomStep : 1 / zoomStep
+      const s1 = clamp(s0 * factor, 0.7, 2.4)
+      if (Math.abs(s1 - s0) < 1e-6) return
+      const w0 = baseW * s0
+      const h0 = baseH * s0
+      const x0 = (w - w0) / 2 + charOffsetX * (w / PREVIEW)
+      const y0 = (h - h0) / 2 + charOffsetY * (h / PREVIEW)
+      const u = clamp((px - x0) / w0, 0, 1)
+      const v = clamp((py - y0) / h0, 0, 1)
+      const w1 = baseW * s1
+      const h1 = baseH * s1
+      const x1NoOff = (w - w1) / 2
+      const y1NoOff = (h - h1) / 2
+      const newOffX = px - (x1NoOff + u * w1)
+      const newOffY = py - (y1NoOff + v * h1)
+      setCharScale(s1)
+      setCharOffsetX(clamp(newOffX * (PREVIEW / w), -260, 260))
+      setCharOffsetY(clamp(newOffY * (PREVIEW / h), -260, 260))
+    },
+    [character?.dataUrl, charScale, charOffsetX, charOffsetY, charNaturalSize, pokeOutputW, pokeOutputH],
+  )
+
+  const applyPokePreset = useCallback((p: 'default' | 'light' | 'dark') => {
+    if (p === 'default') {
+      setPokeBgColor('#1a1a2e')
+      setPokeText1('')
+      setPokeText2('')
+      setPokeFontSize(36)
+      setPokeFontColor('#ffffff')
+      return
+    }
+    if (p === 'light') {
+      setPokeBgColor('#ece8e0')
+      setPokeFontColor('#1e293b')
+      return
+    }
+    setPokeBgColor('#0a0a0f')
+    setPokeFontColor('#f8fafc')
+  }, [])
+
   const applyDefaultTemplate = useCallback(() => {
     const t = DEFAULT_OUTPUT_TOOL_TEMPLATE
     setLogoW(t.logo.width)
@@ -1207,6 +1790,108 @@ export default function OutputTool() {
     setCharScale(1)
     setFaceHint('')
   }, [])
+
+  const removePokeNode = useCallback(
+    (nodeId: string) => {
+      setPokeNodes(nds => nds.filter(n => n.id !== nodeId))
+      setPokeEdges(eds => eds.filter(e => e.source !== nodeId && e.target !== nodeId))
+      setPokeNodeCtxMenu(null)
+    },
+    [setPokeNodes, setPokeEdges],
+  )
+
+  const updatePokeElementTemplate = useCallback(
+    (nodeId: string, partial: Partial<PokeElementTemplateState>) => {
+      setPokeNodes(nds =>
+        nds.map(n => {
+          if (n.id !== nodeId || n.type !== 'otPokeElement') return n
+          const cur = n.data.elementTemplate ?? defaultPokeElementTemplate()
+          const nextGlow = partial.glow ? { ...cur.glow, ...partial.glow } : cur.glow
+          return {
+            ...n,
+            data: {
+              ...n.data,
+              elementTemplate: { ...cur, ...partial, glow: nextGlow },
+            },
+          }
+        }),
+      )
+    },
+    [setPokeNodes],
+  )
+
+  const pokeCtx = useMemo(
+    (): PokeFlowCtx => ({
+      bgColor: pokeBgColor,
+      setBgColor: setPokeBgColor,
+      text1: pokeText1,
+      setText1: setPokeText1,
+      text2: pokeText2,
+      setText2: setPokeText2,
+      fontSize: pokeFontSize,
+      setFontSize: setPokeFontSize,
+      fontColor: pokeFontColor,
+      setFontColor: setPokeFontColor,
+      multiSizeDraft: pokeMultiSizeDraft,
+      setMultiSizeDraft: setPokeMultiSizeDraft,
+      maskColor: pokeMaskColor,
+      setMaskColor: setPokeMaskColor,
+      maskOpacity: pokeMaskOpacity,
+      setMaskOpacity: setPokeMaskOpacity,
+      maskLayer: pokeMaskLayer,
+      setMaskLayer: setPokeMaskLayer,
+      maskReach: pokeMaskReach,
+      setMaskReach: setPokeMaskReach,
+      maskFalloff: pokeMaskFalloff,
+      setMaskFalloff: setPokeMaskFalloff,
+      resetMaskLayerToBuiltin: () => setPokeMaskLayer({ ...POKE_MASK_BUILTIN_LAYER }),
+      updatePokeElementTemplate,
+      removePokeNode,
+      outputWidth: pokeOutputW,
+      setOutputWidth: setPokeOutputW,
+      outputHeight: pokeOutputH,
+      setOutputHeight: setPokeOutputH,
+      previewCanvasPokeRef,
+      exportPoke,
+      onPointerDownPoke,
+      onPointerMovePoke,
+      onPointerUpPoke,
+      onWheelPoke,
+      character,
+      setCharacter,
+      autoFace,
+      faceHint,
+      applyPokePreset,
+      resetCharacterTransform,
+    }),
+    [
+      pokeBgColor,
+      pokeText1,
+      pokeText2,
+      pokeFontSize,
+      pokeFontColor,
+      pokeMultiSizeDraft,
+      pokeMaskColor,
+      pokeMaskOpacity,
+      pokeMaskLayer,
+      pokeMaskReach,
+      pokeMaskFalloff,
+      updatePokeElementTemplate,
+      removePokeNode,
+      pokeOutputW,
+      pokeOutputH,
+      exportPoke,
+      onPointerDownPoke,
+      onPointerMovePoke,
+      onPointerUpPoke,
+      onWheelPoke,
+      character,
+      autoFace,
+      faceHint,
+      applyPokePreset,
+      resetCharacterTransform,
+    ],
+  )
 
   const flowCtx = useMemo(
     (): OutputToolFlowCtx => ({
@@ -1310,6 +1995,15 @@ export default function OutputTool() {
     }),
     [],
   )
+
+  const pokeEdgeTypes = useMemo(() => ({ default: PokeDeletableBezierEdge }), [])
+
+  const [pokePaneMenu, setPokePaneMenu] = useState<{
+    x: number
+    y: number
+    flowX: number
+    flowY: number
+  } | null>(null)
 
   const [nodes, setNodes, onNodesChange] = useNodesState<OutputNodeData>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
@@ -1426,24 +2120,23 @@ export default function OutputTool() {
     }
   }, [nodes.length])
 
+  // 切换 Tab：签名所赠图用主图；戳戳用独立节点边（连线工作流）
   useEffect(() => {
-    setEdges(OT_INITIAL_EDGES)
-  }, [setEdges])
-
-  useEffect(() => {
-    setNodes(prev => {
-      if (prev.length === 0) {
-        return STATIC_OT_NODES.map(n => ({
-          ...n,
-          data: { ...n.data, ctx: flowCtx },
-        }))
-      }
-      return prev.map(n => ({
+    if (activeTab === 'poke') {
+      setNodes([])
+      setEdges([])
+    } else {
+      setNodes(STATIC_OT_NODES.map(n => ({
         ...n,
         data: { ...n.data, ctx: flowCtx },
-      }))
-    })
-  }, [flowCtx, setNodes])
+      })))
+      setEdges(OT_INITIAL_EDGES)
+    }
+  }, [activeTab, flowCtx, setNodes, setEdges])
+
+  useEffect(() => {
+    if (activeTab !== 'poke') setPokePaneMenu(null)
+  }, [activeTab])
 
   const onConnect = useCallback(
     (params: Connection) =>
@@ -1451,19 +2144,85 @@ export default function OutputTool() {
     [setEdges],
   )
 
+  const onConnectPoke = useCallback(
+    (params: Connection) =>
+      setPokeEdges(eds => addEdge({ ...params, animated: true, style: { stroke: POKE_EDGE_COLOR } }, eds)),
+    [setPokeEdges],
+  )
+
+  const addPokeNodeAtFlow = useCallback(
+    (kind: PokeRfNodeType, flowPos: { x: number; y: number }) => {
+      const meta = POKE_ADD_OPTIONS.find(o => o.type === kind)
+      const id = `poke-${kind}-${Date.now()}`
+      const data: PokeFlowNodeData =
+        kind === 'otPokeElement'
+          ? { title: meta?.title ?? '元素模板', elementTemplate: defaultPokeElementTemplate() }
+          : { title: meta?.title ?? kind }
+      setPokeNodes(nds => [
+        ...nds,
+        {
+          id,
+          type: kind,
+          position: { x: flowPos.x, y: flowPos.y },
+          data,
+        },
+      ])
+    },
+    [setPokeNodes],
+  )
+
+  const averagePokeView = useCallback(() => {
+    setPokePaneMenu(null)
+    requestAnimationFrame(() => {
+      try {
+        rfRef.current?.fitView?.({ padding: 0.14, duration: 280 })
+      } catch {
+        /* ignore */
+      }
+    })
+  }, [])
+
   useEffect(() => {
     if (!ctxMenu) return
-    const onDown = () => setCtxMenu(null)
+    const onDocClick = (e: MouseEvent) => {
+      if (e.button > 0) return
+      const t = e.target as Element | null
+      if (t?.closest?.('[data-ot-pane-ctx]')) return
+      setCtxMenu(null)
+    }
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setCtxMenu(null)
     }
-    window.addEventListener('mousedown', onDown)
+    document.addEventListener('click', onDocClick)
     window.addEventListener('keydown', onKey)
     return () => {
-      window.removeEventListener('mousedown', onDown)
+      document.removeEventListener('click', onDocClick)
       window.removeEventListener('keydown', onKey)
     }
   }, [ctxMenu])
+
+  useEffect(() => {
+    if (!pokePaneMenu && !pokeNodeCtxMenu) return
+    const onDocClick = (e: MouseEvent) => {
+      if (e.button > 0) return
+      const t = e.target as Element | null
+      if (t?.closest?.('[data-poke-flow-ctx]')) return
+      setPokePaneMenu(null)
+      setPokeNodeCtxMenu(null)
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setPokePaneMenu(null)
+        setPokeNodeCtxMenu(null)
+      }
+    }
+    document.addEventListener('click', onDocClick)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('click', onDocClick)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [pokePaneMenu, pokeNodeCtxMenu])
 
   // close template channel dropdown on outside click / Esc
   useEffect(() => {
@@ -1651,7 +2410,7 @@ export default function OutputTool() {
             )}
 
           {templateChannel === 'wz-domestic' && wzDomesticSection === 'assets' &&
-            OUTPUT_TOOL_TABS.map((tab, idx) => (
+            OUTPUT_TOOL_TABS.map(tab => (
               <button
                 key={tab.id}
                 type="button"
@@ -1667,7 +2426,6 @@ export default function OutputTool() {
               >
                 <div className="min-w-0">
                   <div className="truncate">{tab.name}</div>
-                  {idx === 0 && <div className="mt-0.5 truncate text-[10px] text-indigo-300/15">Payments Overview</div>}
                 </div>
               </button>
             ))}
@@ -1695,8 +2453,18 @@ export default function OutputTool() {
 
           {/* 王者国内-商城模板：右侧画布区会显示“模板搭建中” */}
         </div>
-        <div className="shrink-0 border-t border-slate-800/60 bg-slate-950/72 backdrop-blur-md px-2.5 py-2">
-          <p className="text-center text-[10px] leading-snug text-slate-500">右键画布 · 平均视图</p>
+        <div className="shrink-0 border-t border-slate-800/60 bg-slate-950/72 px-2.5 py-2 backdrop-blur-md">
+          <p
+            className={`text-center text-[10px] leading-snug ${
+              activeTab === 'poke' ? 'tracking-wide text-slate-500/88' : 'text-slate-500'
+            }`}
+          >
+            {activeTab === 'poke'
+              ? '戳戳：空白右键添加节点 · 拉线连接 · 同签名所赠图工作流'
+              : activeTab === 'stage_dual'
+                ? '模板搭建：右键组件库 · 改色/外发光节点 · 预览与批量（两路输出）'
+                : '右键画布 · 平均视图'}
+          </p>
         </div>
       </div>
 
@@ -1706,6 +2474,10 @@ export default function OutputTool() {
         onContextMenu={e => {
           if (templateChannel === 'wz-camp') return
           if (templateChannel === 'wz-domestic' && wzDomesticSection === 'mall') return
+          if (activeTab === 'poke' || activeTab === 'stage_dual') {
+            e.preventDefault()
+            return
+          }
           e.preventDefault()
           setCtxMenu({ x: e.clientX, y: e.clientY })
         }}
@@ -1714,35 +2486,154 @@ export default function OutputTool() {
           <div className="absolute inset-0 flex items-center justify-center bg-slate-950/40">
             <p className="text-sm text-slate-400">模板搭建中</p>
           </div>
-        ) : (
+        ) : activeTab === 'stage_dual' ? (
+          <StageDualFlow />
+        ) : activeTab === 'poke' ? (
           <>
-            <ReactFlow
-              className="!bg-transparent [&_.react-flow__pane]:!bg-transparent"
-              nodes={nodes}
-              edges={edges}
-              onNodesChange={onNodesChange}
-              onEdgesChange={onEdgesChange}
-              onConnect={onConnect}
-              nodeTypes={nodeTypes}
-              fitView
-              fitViewOptions={{ padding: 0.14 }}
-              proOptions={{ hideAttribution: true }}
-              ref={rfRef}
-            >
-              <Background gap={16} size={1} color="#1f2937" />
-            </ReactFlow>
+            <PokeFlowContext.Provider value={pokeCtx}>
+              <ReactFlow
+                className="app-react-flow-marquee !bg-transparent [&_.react-flow__pane]:!bg-transparent"
+                nodes={pokeNodes}
+                edges={pokeEdges}
+                onNodesChange={onPokeNodesChange}
+                onEdgesChange={onPokeEdgesChange}
+                onConnect={onConnectPoke}
+                deleteKeyCode="Delete"
+                elementsSelectable
+                nodesDraggable
+                selectionOnDrag
+                panOnDrag={[1, 2]}
+                panActivationKeyCode="Space"
+                onNodesDelete={() => setPokeNodeCtxMenu(null)}
+                onNodeContextMenu={(e, node) => {
+                  e.preventDefault()
+                  setPokeNodeCtxMenu({ x: e.clientX, y: e.clientY, nodeId: node.id })
+                }}
+                onPaneContextMenu={e => {
+                  e.preventDefault()
+                  const p = rfRef.current?.screenToFlowPosition?.({ x: e.clientX, y: e.clientY })
+                  setPokePaneMenu({
+                    x: e.clientX,
+                    y: e.clientY,
+                    flowX: p?.x ?? 0,
+                    flowY: p?.y ?? 0,
+                  })
+                }}
+                onPaneClick={() => {
+                  setPokePaneMenu(null)
+                  setPokeNodeCtxMenu(null)
+                }}
+                nodeTypes={pokeFlowNodeTypes}
+                edgeTypes={pokeEdgeTypes}
+                fitView
+                fitViewOptions={{ padding: 0.14 }}
+                proOptions={{ hideAttribution: true }}
+                ref={rfRef}
+                onInit={inst => {
+                  rfRef.current = inst
+                }}
+              >
+                <Background gap={16} size={1} color="#1f2937" />
+              </ReactFlow>
+            </PokeFlowContext.Provider>
+            {pokePaneMenu && (
+              <div
+                data-poke-flow-ctx
+                className="fixed z-50 min-w-[220px] overflow-hidden rounded-lg border border-slate-800/95 bg-slate-950/[0.97] shadow-[0_18px_60px_rgba(0,0,0,0.55)] ring-1 ring-white/[0.04] backdrop-blur-md"
+                style={{ left: pokePaneMenu.x, top: pokePaneMenu.y }}
+                onMouseDown={e => e.stopPropagation()}
+              >
+                <div className="border-b border-slate-800/95 px-2.5 py-1.5 text-[10px] font-medium leading-tight tracking-wide text-slate-400/95">
+                  添加节点
+                </div>
+                <div className="max-h-[min(72vh,520px)] overflow-y-auto py-0.5">
+                  {POKE_ADD_OPTIONS.map(opt => (
+                    <button
+                      key={opt.type}
+                      type="button"
+                      className="w-full px-2.5 py-1.5 text-left transition duration-150 ease-out hover:bg-slate-800/60"
+                      onClick={() => {
+                        addPokeNodeAtFlow(opt.type, { x: pokePaneMenu.flowX, y: pokePaneMenu.flowY })
+                        setPokePaneMenu(null)
+                      }}
+                    >
+                      <div className="text-[11px] font-medium leading-tight text-slate-200">{opt.title}</div>
+                      <div className="mt-px text-[8px] leading-[1.2] text-slate-500">{opt.desc}</div>
+                    </button>
+                  ))}
+                </div>
+                <div className="border-t border-slate-800/95">
+                  <button
+                    type="button"
+                    className="w-full px-2.5 py-1.5 text-left text-[11px] leading-tight text-slate-200 transition duration-150 ease-out hover:bg-slate-800/60"
+                    onClick={() => averagePokeView()}
+                  >
+                    平均视图
+                  </button>
+                </div>
+              </div>
+            )}
+            {pokeNodeCtxMenu && (
+              <div
+                data-poke-flow-ctx
+                className="fixed z-50 min-w-[160px] overflow-hidden rounded-lg border border-slate-800/95 bg-slate-950/[0.97] shadow-[0_18px_60px_rgba(0,0,0,0.55)] ring-1 ring-white/[0.04] backdrop-blur-md"
+                style={{ left: pokeNodeCtxMenu.x, top: pokeNodeCtxMenu.y }}
+                onMouseDown={e => e.stopPropagation()}
+              >
+                <button
+                  type="button"
+                  className="w-full px-2.5 py-1.5 text-left text-[11px] leading-tight text-red-200/95 transition duration-150 ease-out hover:bg-slate-800/60"
+                  onClick={() => removePokeNode(pokeNodeCtxMenu.nodeId)}
+                >
+                  删除节点
+                </button>
+                <button
+                  type="button"
+                  className="w-full px-2.5 py-1.5 text-left text-[11px] leading-tight text-slate-200 transition duration-150 ease-out hover:bg-slate-800/60"
+                  onClick={() => setPokeNodeCtxMenu(null)}
+                >
+                  取消
+                </button>
+              </div>
+            )}
           </>
+        ) : (
+          <ReactFlow
+            className="app-react-flow-marquee !bg-transparent [&_.react-flow__pane]:!bg-transparent"
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            onConnect={onConnect}
+            nodeTypes={nodeTypes}
+            deleteKeyCode="Delete"
+            elementsSelectable
+            nodesDraggable
+            selectionOnDrag
+            panOnDrag={[1, 2]}
+            panActivationKeyCode="Space"
+            fitView
+            fitViewOptions={{ padding: 0.14 }}
+            proOptions={{ hideAttribution: true }}
+            ref={rfRef}
+            onInit={inst => {
+              rfRef.current = inst
+            }}
+          >
+            <Background gap={16} size={1} color="#1f2937" />
+          </ReactFlow>
         )}
 
-        {ctxMenu && templateChannel === 'wz-domestic' && (
+        {ctxMenu && templateChannel === 'wz-domestic' && activeTab !== 'poke' && (
           <div
-            className="fixed z-50 min-w-[180px] rounded-xl border border-slate-800 bg-slate-950/95 backdrop-blur shadow-[0_18px_60px_rgba(0,0,0,0.55)] overflow-hidden"
+            data-ot-pane-ctx
+            className="fixed z-50 min-w-[160px] rounded-lg border border-slate-800 bg-slate-950/95 backdrop-blur shadow-[0_18px_60px_rgba(0,0,0,0.55)] overflow-hidden"
             style={{ left: ctxMenu.x, top: ctxMenu.y }}
             onMouseDown={e => e.stopPropagation()}
           >
             <button
               type="button"
-              className="w-full text-left px-3 py-2 text-sm text-slate-200 hover:bg-slate-800/60 transition"
+              className="w-full px-2.5 py-1 text-left text-[11px] leading-tight text-slate-200 hover:bg-slate-800/60 transition"
               onClick={() => averageView()}
             >
               平均视图

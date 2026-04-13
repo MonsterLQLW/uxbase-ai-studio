@@ -12,6 +12,7 @@ import ReactFlow, {
   type NodeProps,
 } from 'reactflow'
 import 'reactflow/dist/style.css'
+import { RfRangeInput } from './RfRangeInput'
 import {
   avatarFrameShapeIntentPromptEn,
   extractAvatarFramePixelLayout,
@@ -32,6 +33,8 @@ import {
   clearHistory,
   formatTimestamp,
   getAutoSaveInterval,
+  extractHistoryThumbnail,
+  PENDING_RESTORE_HISTORY_ID_KEY,
   type HistoryEntry,
 } from '../lib/stateHistory'
 
@@ -145,6 +148,17 @@ function createEmptyAvatarFrameFlowState(): FlowState {
     similarAnalysis: '',
     similarAnalysisEngine: 'gemini',
     generateImageVariantCount: 1,
+  }
+}
+
+function mergeRestoredFlowState(restored: FlowState): FlowState {
+  const empty = createEmptyAvatarFrameFlowState()
+  return {
+    ...empty,
+    ...restored,
+    referenceSimilarity: Math.min(100, Math.max(0, restored.referenceSimilarity ?? empty.referenceSimilarity)),
+    generateImageVariantCount: restored.generateImageVariantCount === 3 ? 3 : 1,
+    timiImageSize: (restored.timiImageSize === '2K' ? '2K' : '1K') as '1K' | '2K',
   }
 }
 
@@ -1417,14 +1431,13 @@ function PreviewNode({ data }: NodeProps<CustomNodeData>) {
                 <span>参考图相似度</span>
                 <span className="tabular-nums text-slate-200">{referenceSimilarity}</span>
               </div>
-              <input
-                type="range"
+              <RfRangeInput
                 min={0}
                 max={100}
                 step={1}
                 value={referenceSimilarity}
                 onChange={e => data.setState(prev => ({ ...prev, referenceSimilarity: Math.min(100, Math.max(0, Number(e.target.value))) }))}
-                className="w-full h-2 accent-indigo-500 cursor-pointer"
+                className="w-full h-2 accent-indigo-500"
               />
             </div>
 
@@ -1522,6 +1535,20 @@ export default function AvatarFrameDesigner({ state, onStateChange }: AvatarFram
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastStateRef = useRef<string>('')
 
+  // 从首页「项目存档」跳转恢复
+  useEffect(() => {
+    try {
+      const id = sessionStorage.getItem(PENDING_RESTORE_HISTORY_ID_KEY)
+      if (!id) return
+      sessionStorage.removeItem(PENDING_RESTORE_HISTORY_ID_KEY)
+      const entry = loadHistory().find((e) => e.id === id)
+      if (!entry) return
+      onStateChange(() => mergeRestoredFlowState(entry.state as FlowState))
+    } catch {
+      /* ignore */
+    }
+  }, [onStateChange])
+
   const setFlowState = useCallback((updater: (prev: FlowState) => FlowState) => {
     onStateChange(updater)
   }, [onStateChange])
@@ -1529,7 +1556,8 @@ export default function AvatarFrameDesigner({ state, onStateChange }: AvatarFram
   // 手动保存
   const handleManualSave = useCallback(() => {
     const name = saveName.trim() || `版本 ${history.length + 1}`
-    const entry = addHistoryEntry(state as Record<string, unknown>, name, false)
+    const thumb = extractHistoryThumbnail(state as Record<string, unknown>)
+    const entry = addHistoryEntry(state as Record<string, unknown>, name, false, thumb)
     const newHistory = [...history, entry]
     setHistory(newHistory)
     saveHistory(newHistory)
@@ -1560,7 +1588,8 @@ export default function AvatarFrameDesigner({ state, onStateChange }: AvatarFram
     // 设置新的防抖定时器
     autoSaveTimerRef.current = setTimeout(() => {
       setAutoSaveStatus('saving')
-      const entry = addHistoryEntry(state as Record<string, unknown>, '自动保存', true)
+      const thumb = extractHistoryThumbnail(state as Record<string, unknown>)
+      const entry = addHistoryEntry(state as Record<string, unknown>, '自动保存', true, thumb)
       // 只保留最近一个自动保存，避免重复
       const filtered = history.filter(e => !e.auto)
       const newHistory = [...filtered, entry]
@@ -1579,18 +1608,7 @@ export default function AvatarFrameDesigner({ state, onStateChange }: AvatarFram
 
   // 恢复历史版本
   const handleRestore = useCallback((entry: HistoryEntry) => {
-    const restored = entry.state as FlowState
-    // 恢复时需要补上缺失的默认值（因为轻量版可能省略了某些字段）
-    const empty = createEmptyAvatarFrameFlowState()
-    const merged: FlowState = {
-      ...empty,
-      ...restored,
-      // 确保数值在合理范围内
-      referenceSimilarity: Math.min(100, Math.max(0, restored.referenceSimilarity ?? empty.referenceSimilarity)),
-      generateImageVariantCount: restored.generateImageVariantCount === 3 ? 3 : 1,
-      timiImageSize: (restored.timiImageSize === '2K' ? '2K' : '1K') as '1K' | '2K',
-    }
-    onStateChange(() => merged)
+    onStateChange(() => mergeRestoredFlowState(entry.state as FlowState))
     setShowHistoryPanel(false)
   }, [onStateChange])
 
@@ -1873,12 +1891,19 @@ export default function AvatarFrameDesigner({ state, onStateChange }: AvatarFram
           <>
             <div className="absolute inset-0" onContextMenu={onFlowPaneContextMenu}>
               <ReactFlow
+                className="app-react-flow-marquee"
                 nodes={nodes}
                 edges={edges}
                 onNodesChange={onNodesChange}
                 onEdgesChange={onEdgesChange}
                 onConnect={onConnect}
                 nodeTypes={nodeTypes}
+                deleteKeyCode="Delete"
+                elementsSelectable
+                nodesDraggable
+                selectionOnDrag
+                panOnDrag={[1, 2]}
+                panActivationKeyCode="Space"
                 fitView
                 fitViewOptions={{ padding: 0.2 }}
                 proOptions={{ hideAttribution: true }}

@@ -1,6 +1,7 @@
-import { useState, useEffect, lazy, Suspense, Component, type ReactNode } from 'react'
+import { useState, useEffect, useRef, lazy, Suspense, Component, type ReactNode } from 'react'
 import Layout, { type Tab } from './components/Layout'
 import HomePage from './components/HomePage'
+import AiMotionPlaceholder from './components/AiMotionPlaceholder'
 import HomeStyleBackdrop from './components/HomeStyleBackdrop'
 import AuroraBg from './components/AuroraBg'
 import { Settings, Sparkles } from 'lucide-react'
@@ -8,9 +9,20 @@ import ChatPanel from './components/ChatPanel'
 import { setGeminiKey as setGeminiKeyService, setTIMIKey, setTIMIUrl, setTIMIModel, testGeminiConnection, testTIMIConnection } from './services/gemini'
 import type { FlowState as AvatarFlowState } from './components/AvatarFrameDesigner'
 import { APP_PASSWORD } from './config'
+import { extractHistoryThumbnail } from './lib/stateHistory'
+import {
+  saveWorkspaceSnapshot,
+  clearWorkspaceSnapshot,
+  isAvatarStateNonEmpty,
+  tryConsumePendingWorkspaceNav,
+  loadWorkspaceSnapshot,
+} from './lib/homeWorkspaceSnapshots'
+import { safeGetItem, safeRemoveItem, safeSetItem } from './lib/safeLocalStorage'
 
-// 错误边界组件，捕获渲染错误
-class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; error: string }> {
+const UX_AI_MATTING_STATE_KEY = 'uxAiMattingState'
+
+// 错误边界组件，捕获渲染错误（根入口亦包裹，避免白屏无提示）
+export class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; error: string }> {
   constructor(props: { children: ReactNode }) {
     super(props)
     this.state = { hasError: false, error: '' }
@@ -162,16 +174,16 @@ function SettingsPanel({
       if (result.ok) {
         setGeminiResult('success')
         setGeminiTestDetail(result.message)
-        localStorage.setItem('geminiConnectionStatus', 'success')
+        safeSetItem('geminiConnectionStatus', 'success')
       } else {
         setGeminiResult('error')
         setGeminiTestDetail(result.message)
-        localStorage.setItem('geminiConnectionStatus', 'error')
+        safeSetItem('geminiConnectionStatus', 'error')
       }
     } catch {
       setGeminiResult('error')
       setGeminiTestDetail('测试过程发生异常，请打开浏览器控制台查看详情。')
-      localStorage.setItem('geminiConnectionStatus', 'error')
+      safeSetItem('geminiConnectionStatus', 'error')
     }
   }
 
@@ -186,16 +198,16 @@ function SettingsPanel({
       if (result.ok) {
         setTimiResult('success')
         setTimiTestDetail(result.message)
-        localStorage.setItem('timiConnectionStatus', 'success')
+        safeSetItem('timiConnectionStatus', 'success')
       } else {
         setTimiResult('error')
         setTimiTestDetail(result.message)
-        localStorage.setItem('timiConnectionStatus', 'error')
+        safeSetItem('timiConnectionStatus', 'error')
       }
     } catch {
       setTimiResult('error')
       setTimiTestDetail('测试过程发生异常，请打开浏览器控制台查看详情。')
-      localStorage.setItem('timiConnectionStatus', 'error')
+      safeSetItem('timiConnectionStatus', 'error')
     }
   }
 
@@ -372,18 +384,19 @@ function SettingsPanel({
 export default function App() {
   const [isUnlocked, setIsUnlocked] = useState(() => {
     if (!APP_PASSWORD) return true
-    return localStorage.getItem('appUnlocked') === 'true'
+    return safeGetItem('appUnlocked') === 'true'
   })
   const [activeTab, setActiveTab] = useState<Tab>('home')
-  const [geminiKey, setGeminiKey] = useState(() => localStorage.getItem('geminiApiKey') || '')
-  const [timiKey, setTimiKey] = useState(() => localStorage.getItem('timiApiKey') || '')
-  const [timiUrl, setTimiUrl] = useState(() => localStorage.getItem('timiApiUrl') || '')
-  const [timiModel, setTimiModel] = useState(() => localStorage.getItem('timiModel') || 'gpt-5')
+  const [homeRefreshKey, setHomeRefreshKey] = useState(0)
+  const [geminiKey, setGeminiKey] = useState(() => safeGetItem('geminiApiKey') || '')
+  const [timiKey, setTimiKey] = useState(() => safeGetItem('timiApiKey') || '')
+  const [timiUrl, setTimiUrl] = useState(() => safeGetItem('timiApiUrl') || '')
+  const [timiModel, setTimiModel] = useState(() => safeGetItem('timiModel') || 'gpt-5')
   const [geminiResult, setGeminiResult] = useState<'idle' | 'testing' | 'success' | 'error'>(() =>
-    (localStorage.getItem('geminiConnectionStatus') as 'idle' | 'testing' | 'success' | 'error') || 'idle'
+    (safeGetItem('geminiConnectionStatus') as 'idle' | 'testing' | 'success' | 'error') || 'idle'
   )
   const [timiResult, setTimiResult] = useState<'idle' | 'testing' | 'success' | 'error'>(() =>
-    (localStorage.getItem('timiConnectionStatus') as 'idle' | 'testing' | 'success' | 'error') || 'idle'
+    (safeGetItem('timiConnectionStatus') as 'idle' | 'testing' | 'success' | 'error') || 'idle'
   )
   const [geminiTestDetail, setGeminiTestDetail] = useState('')
   const [timiTestDetail, setTimiTestDetail] = useState('')
@@ -420,7 +433,7 @@ export default function App() {
       similarAnalysisEngine: 'gemini',
       generateImageVariantCount: 1,
     }
-    const saved = localStorage.getItem('avatarFrameState')
+    const saved = safeGetItem('avatarFrameState')
     if (saved) {
       try {
         const parsed = JSON.parse(saved) as Partial<AvatarFrameState>
@@ -463,31 +476,50 @@ export default function App() {
       gDegray: 80,
       gFeather: 8,
     }
+    const rawPersist = safeGetItem(UX_AI_MATTING_STATE_KEY)
+    if (rawPersist) {
+      try {
+        const parsed = JSON.parse(rawPersist) as Partial<MattingState>
+        if (parsed && typeof parsed === 'object' && (parsed.originalDataUrl || parsed.processedDataUrl)) {
+          return { ...empty, ...parsed }
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+    const snap = loadWorkspaceSnapshot('ai-matting')
+    const p = snap?.payload as Partial<MattingState> | null
+    if (p && typeof p === 'object' && (p.originalDataUrl || p.processedDataUrl)) {
+      return { ...empty, ...p }
+    }
     return empty
   })
 
+  const mattingRef = useRef(mattingState)
+  mattingRef.current = mattingState
+
   // 持久化 Gemini Key（内存与 localStorage 同步，供各页面调用 Gemini 时立即生效）
   useEffect(() => {
-    localStorage.setItem('geminiApiKey', geminiKey)
+    safeSetItem('geminiApiKey', geminiKey)
     setGeminiKeyService(geminiKey.trim())
   }, [geminiKey])
 
   useEffect(() => {
-    localStorage.setItem('timiApiKey', timiKey)
+    safeSetItem('timiApiKey', timiKey)
     setTIMIKey(timiKey)
     if (timiResult === 'success' || timiResult === 'error') {
       setTimiResult('idle')
-      localStorage.setItem('timiConnectionStatus', 'idle')
+      safeSetItem('timiConnectionStatus', 'idle')
     }
   }, [timiKey])
 
   useEffect(() => {
-    localStorage.setItem('timiApiUrl', timiUrl)
+    safeSetItem('timiApiUrl', timiUrl)
     setTIMIUrl(timiUrl)
   }, [timiUrl])
 
   useEffect(() => {
-    localStorage.setItem('timiModel', timiModel)
+    safeSetItem('timiModel', timiModel)
     setTIMIModel(timiModel)
   }, [timiModel])
 
@@ -526,21 +558,133 @@ export default function App() {
       // localStorage 配额很小（不同浏览器/策略差异大），大图 base64 会直接卡死/抛异常
       if (raw.length > 800_000) {
         const light = JSON.stringify(stripHeavy(avatarFrameState))
-        localStorage.setItem('avatarFrameState', light)
+        safeSetItem('avatarFrameState', light)
       } else {
-        localStorage.setItem('avatarFrameState', raw)
+        safeSetItem('avatarFrameState', raw)
       }
     } catch (e) {
       console.warn('[avatarFrameState] localStorage 持久化失败，已自动瘦身重试：', e)
       try {
-        localStorage.setItem('avatarFrameState', JSON.stringify(stripHeavy(avatarFrameState)))
+        safeSetItem('avatarFrameState', JSON.stringify(stripHeavy(avatarFrameState)))
       } catch (e2) {
         console.warn('[avatarFrameState] 轻量持久化仍失败，跳过本次保存：', e2)
       }
     }
   }, [avatarFrameState])
 
-  // 智能抠图不做 localStorage 持久化：切换顶部 Tab 保留（内存），刷新网页自动清空往期资源
+  useEffect(() => {
+    if (activeTab === 'home') setHomeRefreshKey((k) => k + 1)
+  }, [activeTab])
+
+  // 首页「工作区快照」：短防抖写入，回到首页时能尽快看到存档
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      const raw = avatarFrameState as unknown as Record<string, unknown>
+      if (!isAvatarStateNonEmpty(raw)) {
+        clearWorkspaceSnapshot('avatar-frame')
+        return
+      }
+      const thumb = extractHistoryThumbnail(raw)
+      const title = (avatarFrameState.aiPrompt || '').trim().slice(0, 42) || '头像框创作'
+      saveWorkspaceSnapshot({
+        source: 'avatar-frame',
+        updatedAt: Date.now(),
+        title,
+        subtitle: `${avatarFrameState.shape} · ${avatarFrameState.quadrants.join('/')}`,
+        thumbDataUrl: thumb,
+        payload: null,
+        hasWork: true,
+      })
+    }, 400)
+    return () => clearTimeout(id)
+  }, [avatarFrameState])
+
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      if (!mattingState.originalDataUrl && !mattingState.processedDataUrl) {
+        clearWorkspaceSnapshot('ai-matting')
+        safeRemoveItem(UX_AI_MATTING_STATE_KEY)
+        return
+      }
+      const thumb = mattingState.processedDataUrl || mattingState.originalDataUrl
+      saveWorkspaceSnapshot({
+        source: 'ai-matting',
+        updatedAt: Date.now(),
+        title: '智能抠图',
+        subtitle: mattingState.mode === 'glass' ? '玻璃模式' : '纯色模式',
+        thumbDataUrl: thumb.length < 120_000 ? thumb : undefined,
+        payload: { ...mattingState },
+        hasWork: true,
+      })
+      try {
+        const raw = JSON.stringify(mattingState)
+        if (raw.length < 1_600_000) safeSetItem(UX_AI_MATTING_STATE_KEY, raw)
+      } catch {
+        /* ignore */
+      }
+    }, 400)
+    return () => clearTimeout(id)
+  }, [mattingState])
+
+  useEffect(() => {
+    const flushMattingPersist = () => {
+      const m = mattingRef.current
+      if (!m.originalDataUrl && !m.processedDataUrl) return
+      const thumb = m.processedDataUrl || m.originalDataUrl
+      saveWorkspaceSnapshot({
+        source: 'ai-matting',
+        updatedAt: Date.now(),
+        title: '智能抠图',
+        subtitle: m.mode === 'glass' ? '玻璃模式' : '纯色模式',
+        thumbDataUrl: thumb.length < 120_000 ? thumb : undefined,
+        payload: { ...m },
+        hasWork: true,
+      })
+      try {
+        const raw = JSON.stringify(m)
+        if (raw.length < 1_600_000) safeSetItem(UX_AI_MATTING_STATE_KEY, raw)
+      } catch {
+        /* ignore */
+      }
+    }
+    window.addEventListener('pagehide', flushMattingPersist)
+    window.addEventListener('beforeunload', flushMattingPersist)
+    return () => {
+      window.removeEventListener('pagehide', flushMattingPersist)
+      window.removeEventListener('beforeunload', flushMattingPersist)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (activeTab !== 'ai-matting') return
+    if (!tryConsumePendingWorkspaceNav('ai-matting')) return
+    const snap = loadWorkspaceSnapshot('ai-matting')
+    const p = snap?.payload as Partial<MattingState> | null
+    if (!p || typeof p !== 'object') return
+    const empty: MattingState = {
+      mode: 'solid',
+      originalDataUrl: '',
+      processedDataUrl: '',
+      historyPast: [],
+      historyFuture: [],
+      isWhiteBg: false,
+      isPicking: false,
+      customColors: [],
+      sTolerance: 20,
+      sBlack: 30,
+      sSmooth: 0,
+      sBlur: 10,
+      sShift: -2,
+      gThresh: 10,
+      gBoost: 50,
+      gShadow: 50,
+      gDegray: 80,
+      gFeather: 8,
+    }
+    setMattingState({ ...empty, ...p })
+  }, [activeTab])
+
+  // 智能抠图：uxAiMattingState 全量持久化（对齐 AI 创作的 avatarFrameState）+ 工作区快照供首页存档
 
   // 密码解锁
   const [unlockInput, setUnlockInput] = useState('')
@@ -548,7 +692,7 @@ export default function App() {
 
   const handleUnlock = () => {
     if (unlockInput === APP_PASSWORD) {
-      localStorage.setItem('appUnlocked', 'true')
+      safeSetItem('appUnlocked', 'true')
       setIsUnlocked(true)
       setUnlockError('')
     } else {
@@ -597,14 +741,14 @@ export default function App() {
     <>
       <AuroraBg />
       <Layout activeTab={activeTab} onTabChange={setActiveTab}>
-        {activeTab === 'home' && <HomePage onNavigate={setActiveTab} />}
+        {activeTab === 'home' && <HomePage onNavigate={setActiveTab} homeRefreshKey={homeRefreshKey} />}
         {/* 常驻挂载：切到其他 Tab 不卸载，保留消息、输入与进行中的请求 */}
         <div
           hidden={activeTab !== 'chat'}
           className="h-full min-h-0 min-w-0 flex flex-col"
           aria-hidden={activeTab !== 'chat'}
         >
-          <ChatPanel />
+          <ChatPanel isActive={activeTab === 'chat'} />
         </div>
         {activeTab === 'avatar-frame' && (
           <div className="w-full h-full relative">
@@ -616,6 +760,11 @@ export default function App() {
                 />
               </Suspense>
             </ErrorBoundary>
+          </div>
+        )}
+        {activeTab === 'ai-motion' && (
+          <div className="relative h-full min-h-0 w-full">
+            <AiMotionPlaceholder />
           </div>
         )}
         {activeTab === 'ai-matting' && (

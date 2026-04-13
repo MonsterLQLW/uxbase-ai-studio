@@ -150,7 +150,8 @@ export default defineConfig({
   plugins: [react(), tailwindcss(), timiProxyPlugin()],
   server: {
     host: true,
-    port: 5175,
+    // 与 Vite 默认一致，避免一直访问 5173 时实际服务在 5175 导致「打不开」
+    port: 5173,
     strictPort: false,
   },
 })

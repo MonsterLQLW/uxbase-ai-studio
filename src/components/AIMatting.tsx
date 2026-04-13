@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Scissors, Sparkles } from 'lucide-react'
 import HomeStyleBackdrop from './HomeStyleBackdrop'
+import { RfRangeInput } from './RfRangeInput'
 
 type Mode = 'solid' | 'glass'
 type RGB = { r: number; g: number; b: number }
@@ -1018,14 +1019,13 @@ function Slider({
         <span>{label}</span>
         <span className={`tabular-nums font-mono font-semibold ${color}`}>{value}</span>
       </div>
-      <input
-        type="range"
+      <RfRangeInput
         min={min}
         max={max}
         step={1}
         value={value}
         onChange={e => onChange(Number(e.target.value))}
-        className={`h-1.5 w-full cursor-pointer rounded-full bg-white/[0.1] ${accentCls}`}
+        className={`h-1.5 w-full rounded-full bg-white/[0.1] ${accentCls}`}
       />
     </div>
   )

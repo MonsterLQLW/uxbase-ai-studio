@@ -1,6 +1,8 @@
 /**
  * 与首页一致的环境光斑：静态柔光 + 与 AuroraBg 同系的缓慢流动色块（animate-aurora-*）。
  * `omitSideGlow`：不渲染贴左右边缘的流动光斑，避免在窄栏（如 AI Chat）里形成两侧竖向色带。
+ *
+ * 注意：不要用「整层 inset-0 + blur」包裹光斑，否则在 overflow-hidden 下易出现横向矩形切边/色框。
  */
 export default function HomeStyleBackdrop({
   className = '',
@@ -14,10 +16,8 @@ export default function HomeStyleBackdrop({
       className={`pointer-events-none absolute inset-0 -z-10 overflow-hidden ${className}`}
       aria-hidden
     >
-      <div className="absolute inset-0 opacity-[0.42] blur-3xl">
-        <div className="absolute left-1/2 top-[34%] h-64 w-64 -translate-x-1/2 rounded-full bg-violet-600/30" />
-        <div className="absolute left-1/2 top-[40%] h-48 w-48 translate-x-[min(12vw,6rem)] rounded-full bg-cyan-500/22" />
-      </div>
+      <div className="absolute left-1/2 top-[34%] h-64 w-64 -translate-x-1/2 rounded-full bg-violet-600/30 opacity-[0.42] blur-3xl" />
+      <div className="absolute left-1/2 top-[40%] h-48 w-48 translate-x-[min(12vw,6rem)] rounded-full bg-cyan-500/22 opacity-[0.42] blur-3xl" />
       {!omitSideGlow && (
         <>
           <div

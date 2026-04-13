@@ -11,11 +11,68 @@ export interface HistoryEntry {
   state: Record<string, unknown>
   /** 是否为自动保存 */
   auto: boolean
+  /** 首页缩略图（仅当体积在阈值内时写入，旧数据可能为空） */
+  thumbDataUrl?: string
+}
+
+const THUMB_MAX_CHARS = 120_000
+
+/**
+ * 从历史快照对应的完整状态中抽取一张可作为缩略图的 data URL（控制体积，避免撑爆 localStorage）
+ */
+export function extractHistoryThumbnail(state: Record<string, unknown>): string | undefined {
+  const take = (s: unknown): string | undefined => {
+    if (typeof s !== 'string' || !s.startsWith('data:image')) return undefined
+    return s.length <= THUMB_MAX_CHARS ? s : undefined
+  }
+
+  const gen = state.generatedImageDataUrls
+  if (Array.isArray(gen)) {
+    for (const u of gen) {
+      const t = take(u)
+      if (t) return t
+    }
+  }
+
+  for (const key of ['images', 'similarReferences'] as const) {
+    const arr = state[key] as { dataUrl?: string }[] | undefined
+    if (!Array.isArray(arr)) continue
+    for (const it of arr) {
+      const t = take(it?.dataUrl)
+      if (t) return t
+    }
+  }
+
+  const colorTheme = state.colorTheme as { images?: { dataUrl?: string }[] } | undefined
+  const ci = colorTheme?.images
+  if (Array.isArray(ci)) {
+    for (const it of ci) {
+      const t = take(it?.dataUrl)
+      if (t) return t
+    }
+  }
+
+  const rc = state.regionalConstraints as Record<string, { assets?: { dataUrl?: string }[] }> | undefined
+  if (rc && typeof rc === 'object') {
+    for (const k of Object.keys(rc)) {
+      const assets = rc[k]?.assets
+      if (!Array.isArray(assets)) continue
+      for (const it of assets) {
+        const t = take(it?.dataUrl)
+        if (t) return t
+      }
+    }
+  }
+
+  return undefined
 }
 
 const STORAGE_KEY = 'avatarFrameHistory'
+
+/** 从首页点击存档恢复时，用 sessionStorage 传递目标条目 id（避免整段 JSON 过大） */
+export const PENDING_RESTORE_HISTORY_ID_KEY = 'pendingAvatarFrameHistoryRestoreId'
 const MAX_HISTORY = 20
-const AUTO_SAVE_INTERVAL_MS = 30_000 // 30秒
+const AUTO_SAVE_INTERVAL_MS = 15_000 // 15秒（首页另有工作区快照，双轨保留进度）
 
 /**
  * 从 state 中移除大图 base64，生成轻量版本
@@ -83,7 +140,8 @@ export function saveHistory(history: HistoryEntry[]): void {
 export function addHistoryEntry(
   state: Record<string, unknown>,
   name: string,
-  auto: boolean = false
+  auto: boolean = false,
+  thumbDataUrl?: string
 ): HistoryEntry {
   const entry: HistoryEntry = {
     id: `hist_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
@@ -91,6 +149,7 @@ export function addHistoryEntry(
     name,
     state: stripHeavyState(state),
     auto,
+    ...(thumbDataUrl && thumbDataUrl.length <= THUMB_MAX_CHARS ? { thumbDataUrl } : {}),
   }
   return entry
 }
@@ -108,6 +167,15 @@ export function formatTimestamp(ts: number): string {
   }
   const dateStr = d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })
   return `${dateStr} ${timeStr}`
+}
+
+/** 存档卡片左下角短日期 */
+export function formatArchiveCornerDate(ts: number): string {
+  return new Date(ts).toLocaleDateString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  })
 }
 
 /**

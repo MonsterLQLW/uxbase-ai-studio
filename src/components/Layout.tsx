@@ -1,6 +1,15 @@
-import { MessageSquare, Settings, Frame, Scissors, Package, Home } from 'lucide-react'
+import { MessageSquare, Settings, Frame, Scissors, Package, Home, Wand2 } from 'lucide-react'
+import QclawBrandIcon from './QclawBrandIcon'
+import { QCLAW_LOGIN_URL } from '../config'
 
-export type Tab = 'home' | 'chat' | 'avatar-frame' | 'ai-matting' | 'output-tool' | 'settings'
+export type Tab =
+  | 'home'
+  | 'chat'
+  | 'avatar-frame'
+  | 'ai-motion'
+  | 'ai-matting'
+  | 'output-tool'
+  | 'settings'
 
 interface NavItemProps {
   icon: React.ReactNode
@@ -41,6 +50,7 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
   const isHomeTab = activeTab === 'home'
   const isSettingsTab = activeTab === 'settings'
   const isMattingTab = activeTab === 'ai-matting'
+  const isAiMotionTab = activeTab === 'ai-motion'
 
   return (
     <div className="relative z-10 flex h-screen flex-col bg-transparent text-slate-200">
@@ -77,6 +87,12 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
               onClick={() => onTabChange('avatar-frame')}
             />
             <NavItem
+              icon={<Wand2 size={14} />}
+              label="AI动效"
+              active={activeTab === 'ai-motion'}
+              onClick={() => onTabChange('ai-motion')}
+            />
+            <NavItem
               icon={<Scissors size={14} />}
               label="智能抠图"
               active={activeTab === 'ai-matting'}
@@ -96,15 +112,28 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
             />
           </nav>
 
-          <div className="hidden whitespace-nowrap text-[9px] tracking-wide text-slate-500 lg:ml-1 lg:block lg:shrink-0 lg:pl-4">
-            Gemini · TIMI
-          </div>
+          <a
+            href={QCLAW_LOGIN_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="ml-auto flex shrink-0 items-center gap-1.5 self-end rounded-full bg-rose-500/[0.1] px-2 py-1.5 text-rose-50/95 shadow-[0_0_22px_rgba(251,113,133,0.12)] backdrop-blur-sm transition hover:bg-rose-500/[0.18] hover:text-white sm:self-auto sm:ml-2 sm:px-2.5 lg:ml-3"
+            title="QClaw 已打通 · 打开登录"
+          >
+            <QclawBrandIcon className="h-[18px] w-[18px] shrink-0 sm:h-5 sm:w-5" />
+            <span className="hidden text-[10px] font-medium tracking-wide text-rose-100/90 sm:inline sm:text-[11px]">
+              QClaw
+            </span>
+          </a>
         </div>
       </header>
 
       <main
-        className={`relative min-h-0 flex-1 overflow-hidden ${
-          isHomeTab || isChatTab || isSettingsTab || isMattingTab ? '' : 'bg-slate-950/[0.86] backdrop-blur-md'
+        className={`relative min-h-0 flex-1 ${
+          isHomeTab ? 'overflow-y-auto overflow-x-hidden' : 'overflow-hidden'
+        } ${
+          isHomeTab || isChatTab || isSettingsTab || isMattingTab || isAiMotionTab
+            ? ''
+            : 'bg-slate-950/[0.86] backdrop-blur-md'
         }`}
       >
         <div
@@ -116,10 +145,12 @@ export default function Layout({ children, activeTab, onTabChange }: LayoutProps
                 : isChatTab
                   ? 'relative mx-auto flex h-full min-h-0 w-full max-w-[47.92rem] flex-col px-4 pb-[4.887rem] pt-6 sm:max-w-[55.91rem] sm:px-5 sm:pb-[5.7rem] sm:pt-8'
                   : isHomeTab
-                    ? 'mx-auto flex h-full min-h-0 w-full max-w-none flex-col px-5 pb-10 pt-6 sm:px-8 sm:pb-12 sm:pt-8'
+                    ? 'mx-auto flex w-full max-w-6xl flex-col px-5 pb-6 pt-5 sm:px-8 sm:pb-8 sm:pt-6'
                     : isSettingsTab
                       ? 'relative mx-auto flex h-full min-h-0 w-full max-w-none flex-col px-5 pb-10 pt-6 sm:px-8 sm:pb-12 sm:pt-8'
-                      : 'mx-auto h-full min-h-0 max-w-7xl px-6 py-8'
+                      : isAiMotionTab
+                        ? 'relative mx-auto flex h-full min-h-0 w-full max-w-5xl flex-col px-4 py-4 sm:px-6 sm:py-6'
+                        : 'mx-auto h-full min-h-0 max-w-7xl px-6 py-8'
           }
         >
           {children}

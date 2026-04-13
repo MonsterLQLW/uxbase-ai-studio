@@ -38,3 +38,109 @@ body {
 ::-webkit-scrollbar-track { background: #1e293b; }
 ::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+
+/* React Flow：左键拖出虚线框选；平移画布用中键/右键或按住空格左键拖 */
+.app-react-flow-marquee .react-flow__selection,
+.app-react-flow-marquee .react-flow__nodesselection-rect {
+  border-style: dashed !important;
+  border-width: 1px !important;
+  background: rgba(56, 189, 248, 0.1) !important;
+  border-color: rgba(56, 189, 248, 0.75) !important;
+}
+
+/*
+ * 模板搭建连线口：
+ * 布局盒固定 9×9，与 React Flow handleBounds（offsetWidth/Height + 中心点）一致，拖线起点与中心圆点重合。
+ * 60×60 虚线在 ::after，pointer-events:auto 扩大可点范围，但不参与 offsetWidth。
+ */
+.stage-dual-react-flow .react-flow__handle {
+  width: 9px !important;
+  height: 9px !important;
+  min-width: 9px !important;
+  min-height: 9px !important;
+  z-index: 3;
+  background: transparent !important;
+  border: none !important;
+  border-radius: 9999px;
+  box-shadow: none !important;
+  pointer-events: all !important;
+  cursor: crosshair;
+}
+
+.stage-dual-react-flow .react-flow__handle:hover {
+  z-index: 20;
+}
+
+/* 9px 盒几何中心落在卡片边缘（与默认 6px 用 -4px 同理，半宽伸出边界） */
+.stage-dual-react-flow .react-flow__handle-right {
+  right: -4.5px !important;
+}
+.stage-dual-react-flow .react-flow__handle-left {
+  left: -4.5px !important;
+}
+.stage-dual-react-flow .react-flow__handle-top {
+  top: -4.5px !important;
+}
+.stage-dual-react-flow .react-flow__handle-bottom {
+  bottom: -4.5px !important;
+}
+
+.stage-dual-react-flow .react-flow__handle::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 1;
+  width: 9px;
+  height: 9px;
+  box-sizing: border-box;
+  transform: translate(-50%, -50%);
+  border-radius: 9999px;
+  background: #40c4ff;
+  border: 1px solid rgba(207, 250, 254, 0.45);
+  pointer-events: none;
+}
+
+.stage-dual-react-flow .react-flow__handle::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 0;
+  transform: translate(-50%, -50%);
+  width: 60px;
+  height: 60px;
+  box-sizing: border-box;
+  border-radius: 9999px;
+  border: 1px dashed rgba(64, 196, 255, 0.78);
+  /* 大圈可点，事件仍归主元素，但不改变 9×9 的 offsetWidth（避免拖线起点偏到圈缘） */
+  pointer-events: auto;
+  opacity: 0;
+  transition: opacity 0.14s ease-out;
+}
+
+.stage-dual-react-flow .react-flow__handle:hover::after {
+  opacity: 1;
+}
+
+/* 拖线连接过程中，提示各接口可吸附区域（略淡，避免抢眼） */
+.stage-dual-react-flow.stage-dual-connecting .react-flow__handle::after {
+  opacity: 0.4;
+}
+
+.stage-dual-react-flow.stage-dual-connecting .react-flow__handle:hover::after {
+  opacity: 1;
+}
+
+/* 模板搭建：框选矩形与天青连线同一色相（不改动其他 React Flow 画布） */
+.stage-dual-react-flow.app-react-flow-marquee .react-flow__selection,
+.stage-dual-react-flow.app-react-flow-marquee .react-flow__nodesselection-rect {
+  background: rgba(64, 196, 255, 0.12) !important;
+  border-color: rgba(64, 196, 255, 0.72) !important;
+}
+
+/* 模板搭建：拖线虚线预览，与 STAGE_EDGE_STROKE_MAIN（#40C4FF）一致 */
+.stage-dual-react-flow .react-flow__connection-path {
+  stroke: #40c4ff;
+  stroke-width: 2px;
+}

@@ -741,7 +741,7 @@ const OUTPUT_TOOL_STAGE_DUAL_LIKE_TABS = new Set<OutputToolTabId>([
 
 export default function OutputTool() {
   const [activeTab, setActiveTab] = useState<OutputToolTabId>('signature_gift')
-  const [templateChannel, setTemplateChannel] = useState<'wz-domestic' | 'wz-camp'>('wz-domestic')
+  const [templateChannel, setTemplateChannel] = useState<'custom' | 'wz-domestic' | 'wz-camp'>('wz-domestic')
   const [wzDomesticSection, setWzDomesticSection] = useState<'assets' | 'mall'>('assets')
   const [wzDomesticSectionOpen, setWzDomesticSectionOpen] = useState(false)
   const [tplChannelOpen, setTplChannelOpen] = useState(false)
@@ -749,7 +749,7 @@ export default function OutputTool() {
   const wzSectionBtnRef = useRef<HTMLButtonElement | null>(null)
   const [ctxMenu, setCtxMenu] = useState<null | { x: number; y: number }>(null)
   const isStageDualLikeTab =
-    templateChannel === 'wz-camp' ? true : OUTPUT_TOOL_STAGE_DUAL_LIKE_TABS.has(activeTab)
+    templateChannel === 'wz-camp' || templateChannel === 'custom' ? true : OUTPUT_TOOL_STAGE_DUAL_LIKE_TABS.has(activeTab)
 
   // ── 王者营地：可新增/改名的模板切页 ───────────────────────────────────────
   const CAMP_TABS_STORAGE_KEY = 'outputToolCampTabs:v1'
@@ -777,6 +777,32 @@ export default function OutputTool() {
   const [campNameDraft, setCampNameDraft] = useState('')
   const [campTabCtxMenu, setCampTabCtxMenu] = useState<null | { x: number; y: number; tabId: OutputToolTabId }>(null)
 
+  // ── 个人输出站：与王者营地相同的列表能力（可新增/改名/删除）───────────────
+  const CUSTOM_TABS_STORAGE_KEY = 'outputToolCustomTabs:v1'
+  const [customTabs, setCustomTabs] = useState<Array<{ id: OutputToolTabId; name: string }>>(() => {
+    try {
+      const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(CUSTOM_TABS_STORAGE_KEY) : null
+      if (raw) {
+        const parsed = JSON.parse(raw) as unknown
+        if (Array.isArray(parsed)) {
+          const cleaned = parsed
+            .map((t: any) => ({
+              id: typeof t?.id === 'string' && t.id.startsWith('custom:') ? (t.id as OutputToolTabId) : null,
+              name: typeof t?.name === 'string' ? t.name : '',
+            }))
+            .filter((t: any) => t.id && t.name) as Array<{ id: OutputToolTabId; name: string }>
+          if (cleaned.length > 0) return cleaned
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+    return [{ id: 'custom:template-1' as OutputToolTabId, name: '模板 1' }]
+  })
+  const [customRenamingId, setCustomRenamingId] = useState<OutputToolTabId | null>(null)
+  const [customNameDraft, setCustomNameDraft] = useState('')
+  const [customTabCtxMenu, setCustomTabCtxMenu] = useState<null | { x: number; y: number; tabId: OutputToolTabId }>(null)
+
   useEffect(() => {
     try {
       if (typeof localStorage === 'undefined') return
@@ -787,18 +813,42 @@ export default function OutputTool() {
   }, [campTabs])
 
   useEffect(() => {
+    try {
+      if (typeof localStorage === 'undefined') return
+      localStorage.setItem(CUSTOM_TABS_STORAGE_KEY, JSON.stringify(customTabs))
+    } catch {
+      /* ignore */
+    }
+  }, [customTabs])
+
+  useEffect(() => {
     if (templateChannel === 'wz-camp') setCtxMenu(null)
-    if (templateChannel === 'wz-camp') setWzDomesticSection('assets')
-    if (templateChannel === 'wz-camp') setWzDomesticSectionOpen(false)
-    if (templateChannel === 'wz-camp') setCampTabCtxMenu(null)
+    if (templateChannel !== 'wz-domestic') setWzDomesticSection('assets')
+    if (templateChannel !== 'wz-domestic') setWzDomesticSectionOpen(false)
+    if (templateChannel !== 'wz-camp') setCampTabCtxMenu(null)
+    if (templateChannel !== 'custom') setCustomTabCtxMenu(null)
+
     if (templateChannel === 'wz-camp') {
       setActiveTab(cur => {
         if (typeof cur === 'string' && cur.startsWith('camp:')) return cur
-        return campTabs[0]?.id ?? 'camp:template-1'
+        return campTabs[0]?.id ?? ('camp:template-1' as OutputToolTabId)
       })
-    } else {
-      setActiveTab(cur => (typeof cur === 'string' && cur.startsWith('camp:') ? 'signature_gift' : cur))
+      return
     }
+
+    if (templateChannel === 'custom') {
+      setActiveTab(cur => {
+        if (typeof cur === 'string' && cur.startsWith('custom:')) return cur
+        return customTabs[0]?.id ?? ('custom:template-1' as OutputToolTabId)
+      })
+      return
+    }
+
+    // wz-domestic
+    setActiveTab(cur => {
+      if (typeof cur === 'string' && (cur.startsWith('camp:') || cur.startsWith('custom:'))) return 'signature_gift'
+      return cur
+    })
   }, [templateChannel])
 
   const addCampTemplateTab = useCallback(() => {
@@ -817,6 +867,22 @@ export default function OutputTool() {
     setCampNameDraft(name)
   }, [campTabs])
 
+  const addCustomTemplateTab = useCallback(() => {
+    const id = `custom:${Date.now()}` as const
+    const base = '新模板'
+    const existing = new Set(customTabs.map(t => t.name))
+    let name = base
+    let i = 2
+    while (existing.has(name)) {
+      name = `${base} ${i}`
+      i += 1
+    }
+    setCustomTabs(prev => [...prev, { id: id as OutputToolTabId, name }])
+    setActiveTab(id as OutputToolTabId)
+    setCustomRenamingId(id as OutputToolTabId)
+    setCustomNameDraft(name)
+  }, [customTabs])
+
   const commitCampRename = useCallback(
     (id: OutputToolTabId, nextName: string) => {
       const trimmed = nextName.trim()
@@ -824,6 +890,15 @@ export default function OutputTool() {
       setCampTabs(prev => prev.map(t => (t.id === id ? { ...t, name: trimmed } : t)))
     },
     [setCampTabs],
+  )
+
+  const commitCustomRename = useCallback(
+    (id: OutputToolTabId, nextName: string) => {
+      const trimmed = nextName.trim()
+      if (!trimmed) return
+      setCustomTabs(prev => prev.map(t => (t.id === id ? { ...t, name: trimmed } : t)))
+    },
+    [setCustomTabs],
   )
 
   const deleteCampTemplateTab = useCallback(
@@ -841,6 +916,23 @@ export default function OutputTool() {
       setCampTabCtxMenu(null)
     },
     [campRenamingId],
+  )
+
+  const deleteCustomTemplateTab = useCallback(
+    (id: OutputToolTabId) => {
+      setCustomTabs(prev => {
+        if (prev.length <= 1) return prev
+        const next = prev.filter(t => t.id !== id)
+        setActiveTab(cur => (cur === id ? (next[0]?.id ?? ('custom:template-1' as OutputToolTabId)) : cur))
+        return next.length > 0 ? next : [{ id: 'custom:template-1' as OutputToolTabId, name: '模板 1' }]
+      })
+      if (customRenamingId === id) {
+        setCustomRenamingId(null)
+        setCustomNameDraft('')
+      }
+      setCustomTabCtxMenu(null)
+    },
+    [customRenamingId],
   )
 
   const OUT = 190
@@ -963,7 +1055,7 @@ export default function OutputTool() {
     if (!p || typeof p !== 'object') return
 
     // Always restore light-weight navigation state so switching top-level pages won't reset the last tab.
-    setTemplateChannel(p.templateChannel === 'wz-camp' ? 'wz-camp' : 'wz-domestic')
+    setTemplateChannel(p.templateChannel === 'custom' ? 'custom' : p.templateChannel === 'wz-camp' ? 'wz-camp' : 'wz-domestic')
     setWzDomesticSection(p.wzDomesticSection === 'mall' ? 'mall' : 'assets')
     setActiveTab((p.activeTab as OutputToolTabId) || 'signature_gift')
 
@@ -2374,6 +2466,25 @@ export default function OutputTool() {
   }, [campTabCtxMenu])
 
   useEffect(() => {
+    if (!customTabCtxMenu) return
+    const onDocClick = (e: MouseEvent) => {
+      if (e.button > 0) return
+      const t = e.target as Element | null
+      if (t?.closest?.('[data-custom-tab-ctx]')) return
+      setCustomTabCtxMenu(null)
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setCustomTabCtxMenu(null)
+    }
+    document.addEventListener('click', onDocClick)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('click', onDocClick)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [customTabCtxMenu])
+
+  useEffect(() => {
     if (!pokePaneMenu && !pokeNodeCtxMenu) return
     const onDocClick = (e: MouseEvent) => {
       if (e.button > 0) return
@@ -2465,7 +2576,7 @@ export default function OutputTool() {
                 className="w-full rounded-xl border border-indigo-500/20 bg-slate-950/55 px-3 py-2 pr-8 text-left text-[12px] font-medium text-slate-100 shadow-[0_12px_40px_rgba(0,0,0,0.35)] outline-none transition hover:border-slate-700/70 hover:bg-slate-950/40 focus:border-indigo-400/60 focus:ring-2 focus:ring-indigo-500/15"
                 title="切换模板来源"
               >
-                {templateChannel === 'wz-domestic' ? '王者国内' : '王者营地'}
+                {templateChannel === 'custom' ? '个人输出站' : templateChannel === 'wz-domestic' ? '王者国内' : '王者营地'}
               </button>
               <div className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-300/80">
                 <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
@@ -2485,6 +2596,7 @@ export default function OutputTool() {
                 >
                   {(
                     [
+                      { id: 'custom' as const, label: '个人输出站' },
                       { id: 'wz-domestic' as const, label: '王者国内' },
                       { id: 'wz-camp' as const, label: '王者营地' },
                     ] as const
@@ -2688,6 +2800,101 @@ export default function OutputTool() {
               })}
             </>
           )}
+
+          {templateChannel === 'custom' && (
+            <>
+              <div className="mx-1.5 mb-2 w-[calc(100%-12px)]">
+                <button
+                  type="button"
+                  onClick={addCustomTemplateTab}
+                  className="w-full rounded-lg border border-slate-800/60 bg-slate-950/10 px-2 py-1.5 text-left text-[11px] font-medium text-slate-300/90 transition hover:bg-slate-950/20 hover:border-slate-700/70 focus:outline-none focus:ring-1 focus:ring-indigo-500/15"
+                  title="新增模板切页"
+                >
+                  点击新增模板
+                </button>
+              </div>
+              {customTabs.map(tab => {
+                const active = activeTab === tab.id
+                const renaming = customRenamingId === tab.id
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setActiveTab(tab.id)}
+                    onContextMenu={e => {
+                      if (renaming) return
+                      e.preventDefault()
+                      e.stopPropagation()
+                      setCustomTabCtxMenu({ x: e.clientX, y: e.clientY, tabId: tab.id })
+                    }}
+                    onDoubleClick={() => {
+                      setCustomRenamingId(tab.id)
+                      setCustomNameDraft(tab.name)
+                    }}
+                    className={`group relative mx-1.5 my-1 w-[calc(100%-12px)] rounded-xl px-2.5 py-2 text-left text-[13px] transition-colors duration-150 ${
+                      active ? 'bg-indigo-500/12 text-indigo-300' : 'text-slate-300 hover:bg-slate-800/25 hover:text-slate-100'
+                    }`}
+                    title="双击改名"
+                  >
+                    <div className="min-w-0">
+                      {renaming ? (
+                        <input
+                          value={customNameDraft}
+                          autoFocus
+                          onChange={e => setCustomNameDraft(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') {
+                              commitCustomRename(tab.id, customNameDraft)
+                              setCustomRenamingId(null)
+                            } else if (e.key === 'Escape') {
+                              setCustomRenamingId(null)
+                              setCustomNameDraft('')
+                            }
+                          }}
+                          onBlur={() => {
+                            commitCustomRename(tab.id, customNameDraft)
+                            setCustomRenamingId(null)
+                          }}
+                          className="w-full rounded-md bg-slate-950/40 px-1.5 py-1 text-[12px] text-slate-100 outline-none ring-1 ring-indigo-500/25 focus:ring-2 focus:ring-indigo-500/25"
+                        />
+                      ) : (
+                        <div className="truncate">{tab.name}</div>
+                      )}
+                    </div>
+                  </button>
+                )
+              })}
+            </>
+          )}
+
+          {templateChannel === 'custom' && customTabCtxMenu ? (
+            <div
+              data-custom-tab-ctx
+              className="fixed z-50 min-w-[160px] rounded-lg border border-slate-800 bg-slate-950/95 backdrop-blur shadow-[0_18px_60px_rgba(0,0,0,0.55)] overflow-hidden"
+              style={{ left: customTabCtxMenu.x, top: customTabCtxMenu.y }}
+              onMouseDown={e => e.stopPropagation()}
+            >
+              <button
+                type="button"
+                disabled={customTabs.length <= 1}
+                className={`w-full px-2.5 py-1 text-left text-[11px] leading-tight transition ${
+                  customTabs.length <= 1
+                    ? 'cursor-not-allowed text-slate-500'
+                    : 'text-red-200/95 hover:bg-slate-800/60'
+                }`}
+                onClick={() => deleteCustomTemplateTab(customTabCtxMenu.tabId)}
+              >
+                删除模板
+              </button>
+              <button
+                type="button"
+                className="w-full px-2.5 py-1 text-left text-[11px] leading-tight text-slate-200 hover:bg-slate-800/60 transition"
+                onClick={() => setCustomTabCtxMenu(null)}
+              >
+                取消
+              </button>
+            </div>
+          ) : null}
 
           {templateChannel === 'wz-camp' && campTabCtxMenu ? (
             <div

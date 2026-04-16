@@ -110,7 +110,7 @@ export const OUTPUT_TOOL_DEFAULT_POKE = {
 
 export interface OutputToolSnapPayload {
   activeTab: string
-  templateChannel: 'wz-domestic' | 'wz-camp'
+  templateChannel: 'custom' | 'wz-domestic' | 'wz-camp'
   wzDomesticSection: 'assets' | 'mall'
   character: { dataUrl: string; name: string } | null
   logo: { dataUrl: string; name: string } | null

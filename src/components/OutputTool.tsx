@@ -34,10 +34,8 @@ import {
 } from '../lib/outputStyleMask'
 import { generateSimilarReferenceAnalysisWithTIMI } from '../services/gemini'
 import {
-  PokeFlowContext,
   POKE_ADD_OPTIONS,
   POKE_EDGE_COLOR,
-  pokeFlowNodeTypes,
   defaultPokeElementTemplate,
   POKE_MASK_BUILTIN_LAYER,
   type PokeElementTemplateState,
@@ -766,7 +764,7 @@ export default function OutputTool() {
               id: typeof t?.id === 'string' && t.id.startsWith('camp:') ? (t.id as OutputToolTabId) : null,
               name: typeof t?.name === 'string' ? t.name : '',
             }))
-            .filter((t: any) => t.id && t.name)
+            .filter((t: any) => t.id && t.name) as Array<{ id: OutputToolTabId; name: string }>
           if (cleaned.length > 0) return cleaned
         }
       }
@@ -890,8 +888,8 @@ export default function OutputTool() {
   const [pokeMaskFalloff, setPokeMaskFalloff] = useState(1)
   const [pokeOutputW, setPokeOutputW] = useState(400)
   const [pokeOutputH, setPokeOutputH] = useState(400)
-  const [pokeNodes, setPokeNodes, onPokeNodesChange] = useNodesState<PokeFlowNodeData>([])
-  const [pokeEdges, setPokeEdges, onPokeEdgesChange] = useEdgesState<Edge>([])
+  const [pokeNodes, setPokeNodes, _onPokeNodesChange] = useNodesState<PokeFlowNodeData>([])
+  const [pokeEdges, setPokeEdges, _onPokeEdgesChange] = useEdgesState<Edge>([])
   const [pokeNodeCtxMenu, setPokeNodeCtxMenu] = useState<{
     x: number
     y: number
@@ -1899,7 +1897,7 @@ export default function OutputTool() {
     [setPokeNodes],
   )
 
-  const pokeCtx = useMemo(
+  const _pokeCtx = useMemo(
     (): PokeFlowCtx => ({
       bgColor: pokeBgColor,
       setBgColor: setPokeBgColor,
@@ -2075,7 +2073,7 @@ export default function OutputTool() {
     [],
   )
 
-  const pokeEdgeTypes = useMemo(() => ({ default: PokeDeletableBezierEdge }), [])
+  const _pokeEdgeTypes = useMemo(() => ({ default: PokeDeletableBezierEdge }), [])
 
   const [pokePaneMenu, setPokePaneMenu] = useState<{
     x: number
@@ -2226,13 +2224,13 @@ export default function OutputTool() {
     [setEdges],
   )
 
-  const onConnectPoke = useCallback(
+  const _onConnectPoke = useCallback(
     (params: Connection) =>
       setPokeEdges(eds => addEdge({ ...params, animated: true, style: { stroke: POKE_EDGE_COLOR } }, eds)),
     [setPokeEdges],
   )
 
-  const addPokeNodeAtFlow = useCallback(
+  const _addPokeNodeAtFlow = useCallback(
     (kind: PokeRfNodeType, flowPos: { x: number; y: number }) => {
       const meta = POKE_ADD_OPTIONS.find(o => o.type === kind)
       const id = `poke-${kind}-${Date.now()}`
@@ -2253,7 +2251,7 @@ export default function OutputTool() {
     [setPokeNodes],
   )
 
-  const averagePokeView = useCallback(() => {
+  const _averagePokeView = useCallback(() => {
     setPokePaneMenu(null)
     requestAnimationFrame(() => {
       try {

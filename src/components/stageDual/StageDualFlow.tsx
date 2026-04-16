@@ -40,7 +40,7 @@ import {
 } from '../../lib/outputStyleMask'
 import type { StageDataUrlImage, StageGlow, StageTplId } from '../../lib/stageDualTypes'
 
-const STORAGE_KEY = 'uxStageDualFlow_v3'
+const STORAGE_KEY_BASE = 'uxStageDualFlow_v3'
 
 function stageMaskBuiltinLayer(): StageDataUrlImage {
   return {
@@ -2181,9 +2181,9 @@ function migrateStageMaskNodes(nodes: Node[]): Node[] {
 
 const STAGE_FLOW_VER_MASK_SLIDER_200 = 4
 
-function loadStored(): { nodes: Node[]; edges: Edge[] } | null {
+function loadStored(storageKey: string): { nodes: Node[]; edges: Edge[] } | null {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
+    const raw = localStorage.getItem(storageKey)
     if (!raw) return null
     const p = JSON.parse(raw) as { nodes?: Node[]; edges?: Edge[]; flowVer?: number }
     if (!Array.isArray(p.nodes)) return null
@@ -2204,7 +2204,7 @@ function loadStored(): { nodes: Node[]; edges: Edge[] } | null {
       flowVer = STAGE_FLOW_VER_MASK_SLIDER_200
       try {
         localStorage.setItem(
-          STORAGE_KEY,
+          storageKey,
           JSON.stringify({ ...p, nodes: nodesRaw, edges: edgesIn, flowVer }),
         )
       } catch {
@@ -2220,8 +2220,32 @@ function loadStored(): { nodes: Node[]; edges: Edge[] } | null {
   }
 }
 
-export default function StageDualFlow() {
-  const initial = useMemo(() => loadStored() ?? { nodes: [] as Node[], edges: [] as Edge[] }, [])
+type StageFlowSnapshot = { nodes: Node[]; edges: Edge[] }
+const STAGE_UNDO_LIMIT = 20
+
+function cloneSnapshot(s: StageFlowSnapshot): StageFlowSnapshot {
+  try {
+    // Prefer structuredClone when available (keeps numbers/arrays/objects)
+    const sc = (globalThis as any).structuredClone as undefined | ((v: any) => any)
+    if (typeof sc === 'function') return sc(s) as StageFlowSnapshot
+  } catch {
+    /* ignore */
+  }
+  // Fallback: nodes/edges are JSON-serializable (plain data)
+  return JSON.parse(JSON.stringify(s)) as StageFlowSnapshot
+}
+
+function isTypingTarget(el: Element | null): boolean {
+  if (!el) return false
+  const tag = el.tagName?.toLowerCase?.() || ''
+  if (tag === 'input' || tag === 'textarea' || tag === 'select') return true
+  // ContentEditable areas (e.g., rich text / custom inputs)
+  return (el as HTMLElement).isContentEditable === true
+}
+
+export default function StageDualFlow({ storageKey }: { storageKey?: string }) {
+  const key = storageKey || STORAGE_KEY_BASE
+  const initial = useMemo(() => loadStored(key) ?? { nodes: [] as Node[], edges: [] as Edge[] }, [key])
   const [nodes, setNodes, onNodesChange] = useNodesState(initial.nodes)
   const [edges, setEdges, onEdgesChangeBase] = useEdgesState(initial.edges)
   const rfInst = useRef<ReactFlowInstance | null>(null)
@@ -2233,6 +2257,210 @@ export default function StageDualFlow() {
   } | null>(null)
   const [nodeCtxMenu, setNodeCtxMenu] = useState<{ x: number; y: number; nodeId: string } | null>(null)
   const [connectingLine, setConnectingLine] = useState(false)
+
+  const closeCtxMenus = useCallback(() => {
+    setPaneMenu(null)
+    setNodeCtxMenu(null)
+  }, [])
+
+  // ── Undo / Redo (Ctrl+Z / Ctrl+Y) ─────────────────────────────────────────
+  const [historyPast, setHistoryPast] = useState<StageFlowSnapshot[]>([])
+  const [historyFuture, setHistoryFuture] = useState<StageFlowSnapshot[]>([])
+  const presentRef = useRef<StageFlowSnapshot>(cloneSnapshot({ nodes: initial.nodes, edges: initial.edges }))
+  const restoringRef = useRef(false)
+  const recordTimerRef = useRef<number | null>(null)
+
+  // When switching tabs (storageKey changes), force-load that tab's snapshot.
+  // This guarantees different tabs never share the same nodes/edges in-memory.
+  const loadedKeyRef = useRef<string>(key)
+  useEffect(() => {
+    if (loadedKeyRef.current === key) return
+    loadedKeyRef.current = key
+    const snap = loadStored(key) ?? { nodes: [] as Node[], edges: [] as Edge[] }
+    restoringRef.current = true
+    setHistoryPast([])
+    setHistoryFuture([])
+    presentRef.current = cloneSnapshot(snap)
+    setNodes(snap.nodes)
+    setEdges(snap.edges)
+    window.setTimeout(() => {
+      restoringRef.current = false
+    }, 0)
+    closeCtxMenus()
+  }, [key, closeCtxMenus, setEdges, setNodes])
+
+  const applySnapshot = useCallback(
+    (snap: StageFlowSnapshot) => {
+      restoringRef.current = true
+      const next = cloneSnapshot(snap)
+      presentRef.current = next
+      setNodes(next.nodes)
+      setEdges(next.edges)
+      // allow ReactFlow internal updates settle before recording new history
+      window.setTimeout(() => {
+        restoringRef.current = false
+      }, 0)
+    },
+    [setNodes, setEdges],
+  )
+
+  const undo = useCallback(() => {
+    setHistoryPast(prev => {
+      if (prev.length === 0) return prev
+      const last = prev[prev.length - 1]
+      const cur = cloneSnapshot(presentRef.current)
+      setHistoryFuture(f => [cur, ...f].slice(0, STAGE_UNDO_LIMIT))
+      applySnapshot(last)
+      return prev.slice(0, -1)
+    })
+    closeCtxMenus()
+  }, [applySnapshot, closeCtxMenus])
+
+  const redo = useCallback(() => {
+    setHistoryFuture(prev => {
+      if (prev.length === 0) return prev
+      const next = prev[0]
+      const cur = cloneSnapshot(presentRef.current)
+      setHistoryPast(p => [...p, cur].slice(-STAGE_UNDO_LIMIT))
+      applySnapshot(next)
+      return prev.slice(1)
+    })
+    closeCtxMenus()
+  }, [applySnapshot, closeCtxMenus])
+
+  // Record history on nodes/edges changes (debounced, max 20 steps)
+  useEffect(() => {
+    if (restoringRef.current) return
+    if (recordTimerRef.current != null) window.clearTimeout(recordTimerRef.current)
+    recordTimerRef.current = window.setTimeout(() => {
+      recordTimerRef.current = null
+      if (restoringRef.current) return
+      const nextSnap = cloneSnapshot({ nodes, edges })
+      // push previous present to past, set present to current, clear redo
+      const prevPresent = presentRef.current
+      // Skip recording if nothing changed (best-effort shallow checks)
+      const sameLen = prevPresent.nodes.length === nextSnap.nodes.length && prevPresent.edges.length === nextSnap.edges.length
+      if (sameLen && prevPresent.nodes === nextSnap.nodes && prevPresent.edges === nextSnap.edges) {
+        presentRef.current = nextSnap
+        return
+      }
+      setHistoryPast(p => [...p, cloneSnapshot(prevPresent)].slice(-STAGE_UNDO_LIMIT))
+      setHistoryFuture([])
+      presentRef.current = nextSnap
+    }, 450)
+    return () => {
+      if (recordTimerRef.current != null) window.clearTimeout(recordTimerRef.current)
+      recordTimerRef.current = null
+    }
+  }, [nodes, edges])
+
+  // ── Copy / Paste (Ctrl+C / Ctrl+V) ───────────────────────────────────────
+  const STAGE_CLIPBOARD_KEY = 'uxStageDualClipboard:v1'
+  const pasteNudgeRef = useRef(0)
+
+  const copySelection = useCallback(() => {
+    const selected = nodes.filter(n => (n as any).selected)
+    if (selected.length === 0) return
+    const ids = new Set(selected.map(n => n.id))
+    const selectedEdges = edges.filter(e => ids.has(e.source) && ids.has(e.target))
+    const xs = selected.map(n => n.position?.x ?? 0)
+    const ys = selected.map(n => n.position?.y ?? 0)
+    const minX = Math.min(...xs)
+    const minY = Math.min(...ys)
+    const payload = {
+      v: 1,
+      nodes: selected.map(n => ({ ...n, position: { x: (n.position?.x ?? 0) - minX, y: (n.position?.y ?? 0) - minY } })),
+      edges: selectedEdges,
+      w: Math.max(...xs) - minX,
+      h: Math.max(...ys) - minY,
+      ts: Date.now(),
+    }
+    try {
+      sessionStorage.setItem(STAGE_CLIPBOARD_KEY, JSON.stringify(payload))
+    } catch {
+      /* ignore */
+    }
+  }, [nodes, edges])
+
+  const pasteClipboard = useCallback(() => {
+    let raw: string | null = null
+    try {
+      raw = sessionStorage.getItem(STAGE_CLIPBOARD_KEY)
+    } catch {
+      raw = null
+    }
+    if (!raw) return
+    let parsed: any
+    try {
+      parsed = JSON.parse(raw)
+    } catch {
+      return
+    }
+    const clipNodes = Array.isArray(parsed?.nodes) ? (parsed.nodes as Node[]) : []
+    const clipEdges = Array.isArray(parsed?.edges) ? (parsed.edges as Edge[]) : []
+    if (clipNodes.length === 0) return
+
+    // paste at viewport center (with incremental nudge)
+    const inst = rfInst.current
+    const centerScreen = { x: Math.round(window.innerWidth / 2), y: Math.round(window.innerHeight / 2) }
+    const centerFlow = inst?.screenToFlowPosition ? inst.screenToFlowPosition(centerScreen) : { x: 0, y: 0 }
+    const nudge = (pasteNudgeRef.current = (pasteNudgeRef.current + 1) % 20)
+    const ox = centerFlow.x + 24 * nudge
+    const oy = centerFlow.y + 24 * nudge
+
+    const idMap = new Map<string, string>()
+    const newNodes: Node[] = clipNodes.map(n => {
+      const newId = newStageId('paste')
+      idMap.set(n.id, newId)
+      return {
+        ...n,
+        id: newId,
+        position: { x: ox + (n.position?.x ?? 0), y: oy + (n.position?.y ?? 0) },
+        selected: true,
+      } as any
+    })
+
+    const newEdges: Edge[] = clipEdges
+      .map(e => {
+        const ns = idMap.get(e.source)
+        const nt = idMap.get(e.target)
+        if (!ns || !nt) return null
+        return { ...e, id: `e-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, source: ns, target: nt }
+      })
+      .filter(Boolean) as Edge[]
+
+    // clear old selection, then append & select new nodes
+    setNodes(nds => nds.map(n => ({ ...n, selected: false } as any)).concat(newNodes))
+    setEdges(eds => eds.concat(newEdges))
+    closeCtxMenus()
+  }, [closeCtxMenus, setEdges, setNodes])
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const key = String(e.key || '').toLowerCase()
+      const ctrlOrMeta = e.ctrlKey || e.metaKey
+      if (!ctrlOrMeta) return
+      // keep native undo/redo inside inputs
+      if (isTypingTarget(document.activeElement)) return
+      if (key === 'z') {
+        e.preventDefault()
+        if (e.shiftKey) redo()
+        else undo()
+      } else if (key === 'y') {
+        e.preventDefault()
+        redo()
+      } else if (key === 'c') {
+        e.preventDefault()
+        copySelection()
+      } else if (key === 'v') {
+        e.preventDefault()
+        pasteClipboard()
+      }
+    }
+    window.addEventListener('keydown', onKeyDown, { capture: true })
+    return () => window.removeEventListener('keydown', onKeyDown, { capture: true } as any)
+  }, [undo, redo, copySelection, pasteClipboard])
 
   const addNodeAt = useCallback(
     (spec: StagePaneAddSpec, flowPos: { x: number; y: number }) => {
@@ -2267,12 +2495,20 @@ export default function StageDualFlow() {
     [setNodes, setEdges],
   )
 
-  const clearCanvas = useCallback(() => {
-    if (!window.confirm('清空画布？当前图（含连线）将删除。')) return
-    setNodes([])
-    setEdges([])
+  const clearUploadedAssets = useCallback(() => {
+    const ok = window.confirm('清空上传素材？仅清除舞台层的「角色层 / 元素层」图片，不删除面板与连线。')
+    if (!ok) return
+    setNodes(nds =>
+      nds.map(n => {
+        if (n.type !== 'stRoot') return n
+        const d = (n.data || {}) as Record<string, unknown>
+        const hasAny = Boolean((d as any).sharedCharacter || (d as any).stageElement)
+        if (!hasAny) return n
+        return { ...n, data: { ...d, sharedCharacter: null, stageElement: null } }
+      }),
+    )
     setPaneMenu(null)
-  }, [setNodes, setEdges])
+  }, [setNodes])
 
   const loadSampleGraph = useCallback(() => {
     setNodes(createDefaultNodes())
@@ -2296,11 +2532,6 @@ export default function StageDualFlow() {
         /* ignore */
       }
     })
-  }, [])
-
-  const closeCtxMenus = useCallback(() => {
-    setPaneMenu(null)
-    setNodeCtxMenu(null)
   }, [])
 
   const handleNodesDelete = useCallback(
@@ -2441,7 +2672,7 @@ export default function StageDualFlow() {
     const id = window.setTimeout(() => {
       try {
         localStorage.setItem(
-          STORAGE_KEY,
+          key,
           JSON.stringify({ nodes, edges, flowVer: STAGE_FLOW_VER_MASK_SLIDER_200 }),
         )
       } catch {
@@ -2449,7 +2680,7 @@ export default function StageDualFlow() {
       }
     }, 500)
     return () => clearTimeout(id)
-  }, [nodes, edges])
+  }, [nodes, edges, key])
 
   return (
     <div className="absolute inset-0 min-h-[480px]">
@@ -2546,9 +2777,9 @@ export default function StageDualFlow() {
             <button
               type="button"
               className="w-full px-2.5 py-1 text-left text-[11px] leading-tight text-red-200/95 transition hover:bg-slate-800/60"
-              onClick={() => clearCanvas()}
+              onClick={() => clearUploadedAssets()}
             >
-              清空画布
+              清空上传素材
             </button>
           </div>
         </div>

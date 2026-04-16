@@ -775,6 +775,7 @@ export default function OutputTool() {
   })
   const [campRenamingId, setCampRenamingId] = useState<OutputToolTabId | null>(null)
   const [campNameDraft, setCampNameDraft] = useState('')
+  const [campTabCtxMenu, setCampTabCtxMenu] = useState<null | { x: number; y: number; tabId: OutputToolTabId }>(null)
 
   useEffect(() => {
     try {
@@ -789,6 +790,7 @@ export default function OutputTool() {
     if (templateChannel === 'wz-camp') setCtxMenu(null)
     if (templateChannel === 'wz-camp') setWzDomesticSection('assets')
     if (templateChannel === 'wz-camp') setWzDomesticSectionOpen(false)
+    if (templateChannel === 'wz-camp') setCampTabCtxMenu(null)
     if (templateChannel === 'wz-camp') {
       setActiveTab(cur => {
         if (typeof cur === 'string' && cur.startsWith('camp:')) return cur
@@ -822,6 +824,23 @@ export default function OutputTool() {
       setCampTabs(prev => prev.map(t => (t.id === id ? { ...t, name: trimmed } : t)))
     },
     [setCampTabs],
+  )
+
+  const deleteCampTemplateTab = useCallback(
+    (id: OutputToolTabId) => {
+      setCampTabs(prev => {
+        if (prev.length <= 1) return prev
+        const next = prev.filter(t => t.id !== id)
+        setActiveTab(cur => (cur === id ? (next[0]?.id ?? 'camp:template-1') : cur))
+        return next.length > 0 ? next : [{ id: 'camp:template-1', name: '模板 1' }]
+      })
+      if (campRenamingId === id) {
+        setCampRenamingId(null)
+        setCampNameDraft('')
+      }
+      setCampTabCtxMenu(null)
+    },
+    [campRenamingId],
   )
 
   const OUT = 190
@@ -942,10 +961,14 @@ export default function OutputTool() {
     const snap = loadWorkspaceSnapshot('output-tool')
     const p = snap?.payload as OutputToolSnapPayload | null
     if (!p || typeof p !== 'object') return
-    if (!pending && !isOutputToolSnapPayloadMeaningful(p)) return
-    setActiveTab((p.activeTab as OutputToolTabId) || 'signature_gift')
+
+    // Always restore light-weight navigation state so switching top-level pages won't reset the last tab.
     setTemplateChannel(p.templateChannel === 'wz-camp' ? 'wz-camp' : 'wz-domestic')
     setWzDomesticSection(p.wzDomesticSection === 'mall' ? 'mall' : 'assets')
+    setActiveTab((p.activeTab as OutputToolTabId) || 'signature_gift')
+
+    // Heavy/meaningful editor state only restores when needed.
+    if (!pending && !isOutputToolSnapPayloadMeaningful(p)) return
     setCharacter(p.character)
     setLogo(p.logo)
     setLayer7(p.layer7 || { dataUrl: defaultLayer7Url, name: '内置素材（7号）' })
@@ -2281,6 +2304,26 @@ export default function OutputTool() {
     }
   }, [ctxMenu])
 
+  // close camp tab context menu on outside click / Esc
+  useEffect(() => {
+    if (!campTabCtxMenu) return
+    const onDocClick = (e: MouseEvent) => {
+      if (e.button > 0) return
+      const t = e.target as Element | null
+      if (t?.closest?.('[data-camp-tab-ctx]')) return
+      setCampTabCtxMenu(null)
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setCampTabCtxMenu(null)
+    }
+    document.addEventListener('click', onDocClick)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('click', onDocClick)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [campTabCtxMenu])
+
   useEffect(() => {
     if (!pokePaneMenu && !pokeNodeCtxMenu) return
     const onDocClick = (e: MouseEvent) => {
@@ -2551,6 +2594,12 @@ export default function OutputTool() {
                     key={tab.id}
                     type="button"
                     onClick={() => setActiveTab(tab.id)}
+                    onContextMenu={e => {
+                      if (renaming) return
+                      e.preventDefault()
+                      e.stopPropagation()
+                      setCampTabCtxMenu({ x: e.clientX, y: e.clientY, tabId: tab.id })
+                    }}
                     onDoubleClick={() => {
                       setCampRenamingId(tab.id)
                       setCampNameDraft(tab.name)
@@ -2591,6 +2640,35 @@ export default function OutputTool() {
             </>
           )}
 
+          {templateChannel === 'wz-camp' && campTabCtxMenu ? (
+            <div
+              data-camp-tab-ctx
+              className="fixed z-50 min-w-[160px] rounded-lg border border-slate-800 bg-slate-950/95 backdrop-blur shadow-[0_18px_60px_rgba(0,0,0,0.55)] overflow-hidden"
+              style={{ left: campTabCtxMenu.x, top: campTabCtxMenu.y }}
+              onMouseDown={e => e.stopPropagation()}
+            >
+              <button
+                type="button"
+                disabled={campTabs.length <= 1}
+                className={`w-full px-2.5 py-1 text-left text-[11px] leading-tight transition ${
+                  campTabs.length <= 1
+                    ? 'cursor-not-allowed text-slate-500'
+                    : 'text-red-200/95 hover:bg-slate-800/60'
+                }`}
+                onClick={() => deleteCampTemplateTab(campTabCtxMenu.tabId)}
+              >
+                删除模板
+              </button>
+              <button
+                type="button"
+                className="w-full px-2.5 py-1 text-left text-[11px] leading-tight text-slate-200 hover:bg-slate-800/60 transition"
+                onClick={() => setCampTabCtxMenu(null)}
+              >
+                取消
+              </button>
+            </div>
+          ) : null}
+
           {/* 王者国内-商城模板：右侧画布区会显示“模板搭建中” */}
         </div>
         <div className="shrink-0 border-t border-slate-800/60 bg-slate-950/72 px-2.5 py-2 backdrop-blur-md">
@@ -2624,7 +2702,9 @@ export default function OutputTool() {
             <p className="text-sm text-slate-400">模板搭建中</p>
           </div>
         ) : isStageDualLikeTab ? (
-          <StageDualFlow />
+          <StageDualFlow
+            storageKey={`uxStageDualFlow_v3:${templateChannel}:${String(activeTab)}`}
+          />
         ) : (
           <ReactFlow
             className="app-react-flow-marquee !bg-transparent [&_.react-flow__pane]:!bg-transparent"

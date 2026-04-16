@@ -39,7 +39,16 @@ function timiProxyPlugin(): PluginOption {
           }
         }
 
-        // 只允许 POST
+        // 浏览器端用 HEAD 探测代理是否可用（见 gemini.ts checkIntranetAccess）
+        if (req.method === 'HEAD') {
+          if (!res.writableEnded) {
+            res.writeHead(204, { 'Access-Control-Allow-Origin': '*' })
+            res.end()
+          }
+          return
+        }
+
+        // 只允许 POST 转发真实请求
         if (req.method !== 'POST') {
           safeJson(405, { error: 'Method not allowed' })
           return

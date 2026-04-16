@@ -705,6 +705,7 @@ type OutputToolTabId =
   | 'honor_broadcast'
   | 'mall_discount'
   | 'mall_gift_request'
+  | `camp:${string}`
 
 interface OutputToolTab {
   id: OutputToolTabId
@@ -717,10 +718,10 @@ const OUTPUT_TOOL_TABS: OutputToolTab[] = [
   { id: 'signature_gift', name: '签名·端外索赠图', built: true },
   { id: 'poke', name: '戳戳·配套图', built: true },
   { id: 'stage_dual', name: '模板搭建', built: true },
-  { id: 'signature_peripheral', name: '签名·周边图', built: false },
-  { id: 'button_bundle', name: '按键·配套图', built: false },
-  { id: 'legend_broadcast', name: '传说播报·配套图', built: false },
-  { id: 'honor_broadcast', name: '荣耀播报·配套图', built: false },
+  { id: 'signature_peripheral', name: '签名·周边图', built: true },
+  { id: 'button_bundle', name: '按键·配套图', built: true },
+  { id: 'legend_broadcast', name: '传说播报·配套图', built: true },
+  { id: 'honor_broadcast', name: '荣耀播报·配套图', built: true },
 ]
 
 /** 王者国内 · 商城模板 */
@@ -731,6 +732,14 @@ const OUTPUT_TOOL_MALL_TABS: OutputToolTab[] = [
 
 const OUTPUT_TOOL_ASSET_TAB_IDS = new Set(OUTPUT_TOOL_TABS.map(t => t.id))
 const OUTPUT_TOOL_MALL_TAB_IDS = new Set(OUTPUT_TOOL_MALL_TABS.map(t => t.id))
+const OUTPUT_TOOL_STAGE_DUAL_LIKE_TABS = new Set<OutputToolTabId>([
+  'poke',
+  'stage_dual',
+  'signature_peripheral',
+  'button_bundle',
+  'legend_broadcast',
+  'honor_broadcast',
+])
 
 export default function OutputTool() {
   const [activeTab, setActiveTab] = useState<OutputToolTabId>('signature_gift')
@@ -741,12 +750,81 @@ export default function OutputTool() {
   const tplChannelBtnRef = useRef<HTMLButtonElement | null>(null)
   const wzSectionBtnRef = useRef<HTMLButtonElement | null>(null)
   const [ctxMenu, setCtxMenu] = useState<null | { x: number; y: number }>(null)
+  const isStageDualLikeTab =
+    templateChannel === 'wz-camp' ? true : OUTPUT_TOOL_STAGE_DUAL_LIKE_TABS.has(activeTab)
+
+  // ── 王者营地：可新增/改名的模板切页 ───────────────────────────────────────
+  const CAMP_TABS_STORAGE_KEY = 'outputToolCampTabs:v1'
+  const [campTabs, setCampTabs] = useState<Array<{ id: OutputToolTabId; name: string }>>(() => {
+    try {
+      const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(CAMP_TABS_STORAGE_KEY) : null
+      if (raw) {
+        const parsed = JSON.parse(raw) as unknown
+        if (Array.isArray(parsed)) {
+          const cleaned = parsed
+            .map((t: any) => ({
+              id: typeof t?.id === 'string' && t.id.startsWith('camp:') ? (t.id as OutputToolTabId) : null,
+              name: typeof t?.name === 'string' ? t.name : '',
+            }))
+            .filter((t: any) => t.id && t.name)
+          if (cleaned.length > 0) return cleaned
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+    return [{ id: 'camp:template-1', name: '模板 1' }]
+  })
+  const [campRenamingId, setCampRenamingId] = useState<OutputToolTabId | null>(null)
+  const [campNameDraft, setCampNameDraft] = useState('')
+
+  useEffect(() => {
+    try {
+      if (typeof localStorage === 'undefined') return
+      localStorage.setItem(CAMP_TABS_STORAGE_KEY, JSON.stringify(campTabs))
+    } catch {
+      /* ignore */
+    }
+  }, [campTabs])
 
   useEffect(() => {
     if (templateChannel === 'wz-camp') setCtxMenu(null)
     if (templateChannel === 'wz-camp') setWzDomesticSection('assets')
     if (templateChannel === 'wz-camp') setWzDomesticSectionOpen(false)
+    if (templateChannel === 'wz-camp') {
+      setActiveTab(cur => {
+        if (typeof cur === 'string' && cur.startsWith('camp:')) return cur
+        return campTabs[0]?.id ?? 'camp:template-1'
+      })
+    } else {
+      setActiveTab(cur => (typeof cur === 'string' && cur.startsWith('camp:') ? 'signature_gift' : cur))
+    }
   }, [templateChannel])
+
+  const addCampTemplateTab = useCallback(() => {
+    const id = `camp:${Date.now()}` as const
+    const base = '新模板'
+    const existing = new Set(campTabs.map(t => t.name))
+    let name = base
+    let i = 2
+    while (existing.has(name)) {
+      name = `${base} ${i}`
+      i += 1
+    }
+    setCampTabs(prev => [...prev, { id: id as OutputToolTabId, name }])
+    setActiveTab(id as OutputToolTabId)
+    setCampRenamingId(id as OutputToolTabId)
+    setCampNameDraft(name)
+  }, [campTabs])
+
+  const commitCampRename = useCallback(
+    (id: OutputToolTabId, nextName: string) => {
+      const trimmed = nextName.trim()
+      if (!trimmed) return
+      setCampTabs(prev => prev.map(t => (t.id === id ? { ...t, name: trimmed } : t)))
+    },
+    [setCampTabs],
+  )
 
   const OUT = 190
   const PREVIEW = 380
@@ -1518,7 +1596,8 @@ export default function OutputTool() {
   const pokePendingRef = useRef(false)
 
   useEffect(() => {
-    if (activeTab !== 'poke') return
+    // “戳戳·配套图”等页签目前统一复用模板搭建工作台，不启用旧的 poke 实时预览 loop
+    if (activeTab !== 'poke' || isStageDualLikeTab) return
     let cancelled = false
     let attachRaf = 0
     let attachAttempts = 0
@@ -2120,11 +2199,14 @@ export default function OutputTool() {
     }
   }, [nodes.length])
 
-  // 切换 Tab：签名所赠图用主图；戳戳用独立节点边（连线工作流）
+  // 切换 Tab：模板搭建类页签走同一套工作台；默认输出工具走静态节点
   useEffect(() => {
-    if (activeTab === 'poke') {
-      setNodes([])
-      setEdges([])
+    if (isStageDualLikeTab) {
+      setNodes(STATIC_OT_NODES.map(n => ({
+        ...n,
+        data: { ...n.data, ctx: flowCtx },
+      })))
+      setEdges(OT_INITIAL_EDGES)
     } else {
       setNodes(STATIC_OT_NODES.map(n => ({
         ...n,
@@ -2132,7 +2214,7 @@ export default function OutputTool() {
       })))
       setEdges(OT_INITIAL_EDGES)
     }
-  }, [activeTab, flowCtx, setNodes, setEdges])
+  }, [activeTab, flowCtx, isStageDualLikeTab, setNodes, setEdges])
 
   useEffect(() => {
     if (activeTab !== 'poke') setPokePaneMenu(null)
@@ -2451,6 +2533,66 @@ export default function OutputTool() {
               </button>
             ))}
 
+          {templateChannel === 'wz-camp' && (
+            <>
+              <div className="mx-1.5 mb-2 w-[calc(100%-12px)]">
+                <button
+                  type="button"
+                  onClick={addCampTemplateTab}
+                  className="w-full rounded-lg border border-slate-800/60 bg-slate-950/10 px-2 py-1.5 text-left text-[11px] font-medium text-slate-300/90 transition hover:bg-slate-950/20 hover:border-slate-700/70 focus:outline-none focus:ring-1 focus:ring-indigo-500/15"
+                  title="新增模板切页"
+                >
+                  点击新增模板
+                </button>
+              </div>
+              {campTabs.map(tab => {
+                const active = activeTab === tab.id
+                const renaming = campRenamingId === tab.id
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setActiveTab(tab.id)}
+                    onDoubleClick={() => {
+                      setCampRenamingId(tab.id)
+                      setCampNameDraft(tab.name)
+                    }}
+                    className={`group relative mx-1.5 my-1 w-[calc(100%-12px)] rounded-xl px-2.5 py-2 text-left text-[13px] transition-colors duration-150 ${
+                      active ? 'bg-indigo-500/12 text-indigo-300' : 'text-slate-300 hover:bg-slate-800/25 hover:text-slate-100'
+                    }`}
+                    title="双击改名"
+                  >
+                    <div className="min-w-0">
+                      {renaming ? (
+                        <input
+                          value={campNameDraft}
+                          autoFocus
+                          onChange={e => setCampNameDraft(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') {
+                              commitCampRename(tab.id, campNameDraft)
+                              setCampRenamingId(null)
+                            } else if (e.key === 'Escape') {
+                              setCampRenamingId(null)
+                              setCampNameDraft('')
+                            }
+                          }}
+                          onBlur={() => {
+                            commitCampRename(tab.id, campNameDraft)
+                            setCampRenamingId(null)
+                          }}
+                          className="w-full rounded-md bg-slate-950/40 px-1.5 py-1 text-[12px] text-slate-100 outline-none ring-1 ring-indigo-500/25 focus:ring-2 focus:ring-indigo-500/25"
+                        />
+                      ) : (
+                        <div className="truncate">{tab.name}</div>
+                      )}
+                    </div>
+                  </button>
+                )
+              })}
+            </>
+          )}
+
           {/* 王者国内-商城模板：右侧画布区会显示“模板搭建中” */}
         </div>
         <div className="shrink-0 border-t border-slate-800/60 bg-slate-950/72 px-2.5 py-2 backdrop-blur-md">
@@ -2459,9 +2601,7 @@ export default function OutputTool() {
               activeTab === 'poke' ? 'tracking-wide text-slate-500/88' : 'text-slate-500'
             }`}
           >
-            {activeTab === 'poke'
-              ? '戳戳：空白右键添加节点 · 拉线连接 · 同签名所赠图工作流'
-              : activeTab === 'stage_dual'
+            {isStageDualLikeTab
                 ? '模板搭建：右键组件库 · 改色/外发光节点 · 预览与批量（两路输出）'
                 : '右键画布 · 平均视图'}
           </p>
@@ -2472,9 +2612,8 @@ export default function OutputTool() {
       <div
         className="flex-1 min-h-0 w-full relative ml-[156px]"
         onContextMenu={e => {
-          if (templateChannel === 'wz-camp') return
           if (templateChannel === 'wz-domestic' && wzDomesticSection === 'mall') return
-          if (activeTab === 'poke' || activeTab === 'stage_dual') {
+          if (isStageDualLikeTab) {
             e.preventDefault()
             return
           }
@@ -2482,121 +2621,12 @@ export default function OutputTool() {
           setCtxMenu({ x: e.clientX, y: e.clientY })
         }}
       >
-        {templateChannel === 'wz-camp' || (templateChannel === 'wz-domestic' && wzDomesticSection === 'mall') ? (
+        {templateChannel === 'wz-domestic' && wzDomesticSection === 'mall' ? (
           <div className="absolute inset-0 flex items-center justify-center bg-slate-950/40">
             <p className="text-sm text-slate-400">模板搭建中</p>
           </div>
-        ) : activeTab === 'stage_dual' ? (
+        ) : isStageDualLikeTab ? (
           <StageDualFlow />
-        ) : activeTab === 'poke' ? (
-          <>
-            <PokeFlowContext.Provider value={pokeCtx}>
-              <ReactFlow
-                className="app-react-flow-marquee !bg-transparent [&_.react-flow__pane]:!bg-transparent"
-                nodes={pokeNodes}
-                edges={pokeEdges}
-                onNodesChange={onPokeNodesChange}
-                onEdgesChange={onPokeEdgesChange}
-                onConnect={onConnectPoke}
-                deleteKeyCode="Delete"
-                elementsSelectable
-                nodesDraggable
-                selectionOnDrag
-                panOnDrag={[1, 2]}
-                panActivationKeyCode="Space"
-                onNodesDelete={() => setPokeNodeCtxMenu(null)}
-                onNodeContextMenu={(e, node) => {
-                  e.preventDefault()
-                  setPokeNodeCtxMenu({ x: e.clientX, y: e.clientY, nodeId: node.id })
-                }}
-                onPaneContextMenu={e => {
-                  e.preventDefault()
-                  const p = rfRef.current?.screenToFlowPosition?.({ x: e.clientX, y: e.clientY })
-                  setPokePaneMenu({
-                    x: e.clientX,
-                    y: e.clientY,
-                    flowX: p?.x ?? 0,
-                    flowY: p?.y ?? 0,
-                  })
-                }}
-                onPaneClick={() => {
-                  setPokePaneMenu(null)
-                  setPokeNodeCtxMenu(null)
-                }}
-                nodeTypes={pokeFlowNodeTypes}
-                edgeTypes={pokeEdgeTypes}
-                fitView
-                fitViewOptions={{ padding: 0.14 }}
-                proOptions={{ hideAttribution: true }}
-                ref={rfRef}
-                onInit={inst => {
-                  rfRef.current = inst
-                }}
-              >
-                <Background gap={16} size={1} color="#1f2937" />
-              </ReactFlow>
-            </PokeFlowContext.Provider>
-            {pokePaneMenu && (
-              <div
-                data-poke-flow-ctx
-                className="fixed z-50 min-w-[220px] overflow-hidden rounded-lg border border-slate-800/95 bg-slate-950/[0.97] shadow-[0_18px_60px_rgba(0,0,0,0.55)] ring-1 ring-white/[0.04] backdrop-blur-md"
-                style={{ left: pokePaneMenu.x, top: pokePaneMenu.y }}
-                onMouseDown={e => e.stopPropagation()}
-              >
-                <div className="border-b border-slate-800/95 px-2.5 py-1.5 text-[10px] font-medium leading-tight tracking-wide text-slate-400/95">
-                  添加节点
-                </div>
-                <div className="max-h-[min(72vh,520px)] overflow-y-auto py-0.5">
-                  {POKE_ADD_OPTIONS.map(opt => (
-                    <button
-                      key={opt.type}
-                      type="button"
-                      className="w-full px-2.5 py-1.5 text-left transition duration-150 ease-out hover:bg-slate-800/60"
-                      onClick={() => {
-                        addPokeNodeAtFlow(opt.type, { x: pokePaneMenu.flowX, y: pokePaneMenu.flowY })
-                        setPokePaneMenu(null)
-                      }}
-                    >
-                      <div className="text-[11px] font-medium leading-tight text-slate-200">{opt.title}</div>
-                      <div className="mt-px text-[8px] leading-[1.2] text-slate-500">{opt.desc}</div>
-                    </button>
-                  ))}
-                </div>
-                <div className="border-t border-slate-800/95">
-                  <button
-                    type="button"
-                    className="w-full px-2.5 py-1.5 text-left text-[11px] leading-tight text-slate-200 transition duration-150 ease-out hover:bg-slate-800/60"
-                    onClick={() => averagePokeView()}
-                  >
-                    平均视图
-                  </button>
-                </div>
-              </div>
-            )}
-            {pokeNodeCtxMenu && (
-              <div
-                data-poke-flow-ctx
-                className="fixed z-50 min-w-[160px] overflow-hidden rounded-lg border border-slate-800/95 bg-slate-950/[0.97] shadow-[0_18px_60px_rgba(0,0,0,0.55)] ring-1 ring-white/[0.04] backdrop-blur-md"
-                style={{ left: pokeNodeCtxMenu.x, top: pokeNodeCtxMenu.y }}
-                onMouseDown={e => e.stopPropagation()}
-              >
-                <button
-                  type="button"
-                  className="w-full px-2.5 py-1.5 text-left text-[11px] leading-tight text-red-200/95 transition duration-150 ease-out hover:bg-slate-800/60"
-                  onClick={() => removePokeNode(pokeNodeCtxMenu.nodeId)}
-                >
-                  删除节点
-                </button>
-                <button
-                  type="button"
-                  className="w-full px-2.5 py-1.5 text-left text-[11px] leading-tight text-slate-200 transition duration-150 ease-out hover:bg-slate-800/60"
-                  onClick={() => setPokeNodeCtxMenu(null)}
-                >
-                  取消
-                </button>
-              </div>
-            )}
-          </>
         ) : (
           <ReactFlow
             className="app-react-flow-marquee !bg-transparent [&_.react-flow__pane]:!bg-transparent"
@@ -2624,7 +2654,7 @@ export default function OutputTool() {
           </ReactFlow>
         )}
 
-        {ctxMenu && templateChannel === 'wz-domestic' && activeTab !== 'poke' && (
+        {ctxMenu && templateChannel === 'wz-domestic' && !isStageDualLikeTab && (
           <div
             data-ot-pane-ctx
             className="fixed z-50 min-w-[160px] rounded-lg border border-slate-800 bg-slate-950/95 backdrop-blur shadow-[0_18px_60px_rgba(0,0,0,0.55)] overflow-hidden"

@@ -1197,7 +1197,56 @@ export default function OutputTool() {
     )
     const hasWork = !!(character?.dataUrl || logo?.dataUrl || hasPokeElement) || pokeTouched
     if (!hasWork) {
-      clearWorkspaceSnapshot('output-tool')
+      // Keep a light-weight nav snapshot even when no assets were edited/uploaded.
+      // This enables returning to the exact last tab after switching top-level pages.
+      const navPayload: OutputToolSnapPayload = {
+        activeTab,
+        templateChannel,
+        wzDomesticSection,
+        character: null,
+        logo: null,
+        layer7: { dataUrl: defaultLayer7Url, name: '内置素材（7号）' },
+        layer7TintBlue: DEFAULT_OUTPUT_TOOL_TEMPLATE.layer7.tint,
+        layer7TintPurple: DEFAULT_OUTPUT_TOOL_TEMPLATE.layer7.tintPurple,
+        logoW: DEFAULT_OUTPUT_TOOL_TEMPLATE.logo.width,
+        logoH: DEFAULT_OUTPUT_TOOL_TEMPLATE.logo.height,
+        logoMargin: DEFAULT_OUTPUT_TOOL_TEMPLATE.logo.margin,
+        glowEnabled: DEFAULT_OUTPUT_TOOL_TEMPLATE.logo.glow.enabled,
+        glowColor: DEFAULT_OUTPUT_TOOL_TEMPLATE.logo.glow.color,
+        glowSize: DEFAULT_OUTPUT_TOOL_TEMPLATE.logo.glow.size,
+        glowOpacity: DEFAULT_OUTPUT_TOOL_TEMPLATE.logo.glow.opacity,
+        charScale: DEFAULT_OUTPUT_TOOL_TEMPLATE.character.scale,
+        charOffsetX: DEFAULT_OUTPUT_TOOL_TEMPLATE.character.offsetX,
+        charOffsetY: DEFAULT_OUTPUT_TOOL_TEMPLATE.character.offsetY,
+        blueFileName: 'output-blue',
+        purpleFileName: 'output-purple',
+        pokeOutputW: OUTPUT_TOOL_DEFAULT_POKE.outW,
+        pokeOutputH: OUTPUT_TOOL_DEFAULT_POKE.outH,
+        pokeBgColor: OUTPUT_TOOL_DEFAULT_POKE.bg,
+        pokeText1: OUTPUT_TOOL_DEFAULT_POKE.text1,
+        pokeText2: OUTPUT_TOOL_DEFAULT_POKE.text2,
+        pokeFontSize: 36,
+        pokeFontColor: '#ffffff',
+        pokeMultiSizeDraft: OUTPUT_TOOL_DEFAULT_POKE.draft,
+        pokeMaskColor: '#000000',
+        pokeMaskOpacity: 0,
+        pokeMaskLayer: { ...POKE_MASK_BUILTIN_LAYER },
+        pokeMaskReach: 0.76,
+        pokeMaskFalloff: 1,
+        pokeMaskSliderRangeV2: true,
+        pokeNodes: [],
+        pokeEdges: [],
+      }
+      const tabName =
+        [...OUTPUT_TOOL_TABS, ...OUTPUT_TOOL_MALL_TABS].find(t => t.id === activeTab)?.name || '输出工具'
+      saveWorkspaceSnapshot({
+        source: 'output-tool',
+        updatedAt: Date.now(),
+        title: '输出工具',
+        subtitle: tabName,
+        payload: navPayload,
+        hasWork: false,
+      })
       return
     }
     const payload: OutputToolSnapPayload = {
